@@ -735,16 +735,30 @@ function subProg(t) {
 }
 
 function getDayList() {
-  const pending = tasks.filter(t => !t.done && t.status !== 'waiting');
-  const sorted  = [...pending].sort((a,b) => taskScore(b) - taskScore(a));
-  const aIds    = new Set(tasks.filter(t => t.dayAssigned===td() && !t.done).map(t=>t.id));
-  const dayList = tasks.filter(t => t.dayAssigned===td() && !t.done);
+  const today = td();
+  // eligible = not done, not waiting, and dueDate is today or in the past or not set
+  const pending = tasks.filter(t =>
+    !t.done &&
+    t.status !== 'waiting' &&
+    (!t.dueDate || t.dueDate <= today)
+  );
+  const sorted = [...pending].sort((a,b) => taskScore(b) - taskScore(a));
+
+  // already assigned today (and still eligible)
+  const aIds    = new Set(tasks.filter(t => t.dayAssigned===today && !t.done && (!t.dueDate || t.dueDate <= today)).map(t=>t.id));
+  const dayList = tasks.filter(t => t.dayAssigned===today && !t.done && (!t.dueDate || t.dueDate <= today));
+
+  // auto-fill up to maxDay
   for (const t of sorted) {
     if (dayList.length >= maxDay) break;
-    if (!aIds.has(t.id)) { t.dayAssigned = td(); dayList.push(t); aIds.add(t.id); }
+    if (!aIds.has(t.id)) { t.dayAssigned = today; dayList.push(t); aIds.add(t.id); }
   }
   save();
-  return { dayList, remaining: sorted.filter(t => !aIds.has(t.id)) };
+
+  // future tasks — shown separately
+  const future = tasks.filter(t => !t.done && t.status !== 'waiting' && t.dueDate && t.dueDate > today);
+  const remaining = sorted.filter(t => !aIds.has(t.id));
+  return { dayList, remaining, future };
 }
 
 /* ═══════════════════════════════════════════
@@ -1049,8 +1063,12 @@ function saveTask() {
 
   if (editId) {
     const t = tasks.find(t => t.id === editId);
-    if (t) Object.assign(t, {name,client,estTime,dueDate,urgency:fU,importance:fI,energy:fE,status:fStatus,waitingFor,note,updatedAt:Date.now()});
-    syncTask(t);
+    if (t) {
+      // if dueDate changed to future, remove from today's list
+      if (dueDate && dueDate > td() && t.dayAssigned === td()) t.dayAssigned = null;
+      Object.assign(t, {name,client,estTime,dueDate,urgency:fU,importance:fI,energy:fE,status:fStatus,waitingFor,note,updatedAt:Date.now()});
+      syncTask(t);
+    }
   } else {
     const newTask = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2,5),
@@ -1071,10 +1089,10 @@ function saveTask() {
    RENDER
 ═══════════════════════════════════════════ */
 function renderToday() {
-  const { dayList, remaining } = getDayList();
+  const { dayList, remaining, future } = getDayList();
   const done = dayList.filter(t => t.done).length;
   let html = '';
-  if (!dayList.length) {
+  if (!dayList.length && !future.length) {
     html = `<div class="empty"><div class="empty-icon">✦</div><div class="empty-title">Brak zadań na dziś</div><div class="empty-sub">Dodaj pierwsze zadanie przyciskiem poniżej.</div></div>`;
   } else {
     const pending  = dayList.filter(t => !t.done);
@@ -1084,6 +1102,10 @@ function renderToday() {
     if (finished.length) html += '<div class="section-label">ukończone</div>' + finished.map(t => taskHTML(t,false)).join('');
     const waiting = tasks.filter(t => t.status==='waiting' && !t.done);
     if (waiting.length)  html += '<div class="section-label">czekam na</div>' + waiting.map(t => taskHTML(t,false)).join('');
+    if (future.length) {
+      const sorted = [...future].sort((a,b) => a.dueDate.localeCompare(b.dueDate));
+      html += '<div class="section-label">zaplanowane</div>' + sorted.map(t => taskHTML(t,false)).join('');
+    }
   }
   document.getElementById('today-content').innerHTML = html;
   updateHeroProgress();
