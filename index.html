@@ -194,6 +194,21 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
 .fchip.active{background:var(--mauve);color:white;border-color:var(--mauve)}
 
 /* ── CLIENTS ── */
+.client-card{background:var(--bg);border:.5px solid var(--bd);border-radius:14px;margin-bottom:10px;overflow:hidden}
+.client-card-header{display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer}
+.client-card-header:hover{background:var(--bg2)}
+.client-card-body{display:none;border-top:.5px solid var(--bd);padding:12px 14px}
+.client-card-body.open{display:block}
+.remember-label{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
+.bullet-list{list-style:none;margin-bottom:8px}
+.bullet-item{display:flex;align-items:flex-start;gap:8px;padding:4px 0;font-size:13px;color:var(--text);line-height:1.4;border-bottom:.5px solid var(--bd)}
+.bullet-item:last-child{border-bottom:none}
+.bullet-dot{width:5px;height:5px;border-radius:50%;background:var(--mauve);flex-shrink:0;margin-top:6px}
+.bullet-del{background:none;border:none;cursor:pointer;color:var(--text3);font-size:13px;padding:0 2px;flex-shrink:0;line-height:1}
+.add-bullet-row{display:flex;gap:6px;margin-top:6px}
+.add-bullet-row input{flex:1;font-size:13px;padding:7px 10px;border:.5px solid var(--bd2);border-radius:8px;background:var(--bg);color:var(--text)}
+.add-bullet-row input:focus{outline:none;border-color:var(--mauve)}
+.add-bullet-btn{padding:7px 12px;background:var(--mauve);color:white;border:none;border-radius:8px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap}
 .client-row{display:flex;align-items:center;gap:10px;padding:11px 14px;background:var(--bg);border:.5px solid var(--bd);border-radius:12px;margin-bottom:7px}
 .client-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
 .client-name-txt{font-size:14px;font-weight:500;color:var(--text)}
@@ -252,7 +267,7 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
   <div class="nav">
     <button class="nav-btn active" onclick="switchTab('today',this)">Dziś</button>
     <button class="nav-btn" onclick="switchTab('all',this)">Wszystkie</button>
-    <button class="nav-btn" onclick="switchTab('clients',this)">Klienci</button>
+    <button class="nav-btn" onclick="switchTab('plans',this)">Plany</button>
   </div>
 
   <!-- TABS -->
@@ -263,16 +278,18 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
     <div id="all-content"></div>
   </div>
 
-  <div id="tab-clients" class="tab">
-    <div class="section-label">obszary i klienci</div>
-    <div id="clients-content"></div>
-    <div class="add-row">
-      <input type="text" class="form-input" id="new-client" placeholder="Nowy klient / obszar..." onkeydown="if(event.key==='Enter')addClient()">
-      <button class="add-row-btn" onclick="addClient()">Dodaj</button>
-    </div>
-  </div>
+  <div id="tab-plans" class="tab"><div id="plans-content"></div></div>
 
   <div id="tab-settings" class="tab">
+    <div class="settings-section">
+      <div class="settings-section-title">Klienci i obszary</div>
+      <div id="clients-content"></div>
+      <div class="add-row" style="margin-top:6px">
+        <input type="text" class="form-input" id="new-client" placeholder="Nowy klient / obszar..." onkeydown="if(event.key==='Enter')addClient()">
+        <button class="add-row-btn" onclick="addClient()">Dodaj</button>
+      </div>
+    </div>
+
     <div class="settings-section">
       <div class="settings-section-title">Google Sheets sync</div>
       <p style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.5">Wklej URL swojego Google Apps Script (wdróż jako Web App z dostępem "Anyone"). Dane będą synchronizowane przy każdej zmianie.</p>
@@ -404,18 +421,20 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
 /* ═══════════════════════════════════════════
    STORAGE KEYS
 ═══════════════════════════════════════════ */
-const SK = 'mata_tasks_v4';
-const CK = 'mata_clients_v2';
-const GK = 'mata_gs_url';
-const MK = 'mata_max_day';
+const SK  = 'mata_tasks_v4';
+const CK  = 'mata_clients_v2';
+const CNK = 'mata_client_notes_v1';
+const GK  = 'mata_gs_url';
+const MK  = 'mata_max_day';
 
 /* ═══════════════════════════════════════════
    STATE
 ═══════════════════════════════════════════ */
-let tasks   = JSON.parse(localStorage.getItem(SK) || '[]');
-let clients = JSON.parse(localStorage.getItem(CK) || '["Sandoz","AZ","UCB","Recipharm","Prywatne"]');
-let gsUrl   = localStorage.getItem(GK) || '';
-let maxDay  = parseInt(localStorage.getItem(MK) || '5');
+let tasks        = JSON.parse(localStorage.getItem(SK)  || '[]');
+let clients      = JSON.parse(localStorage.getItem(CK)  || '["Sandoz","AZ","UCB","Recipharm","Prywatne"]');
+let clientNotes  = JSON.parse(localStorage.getItem(CNK) || '{}');
+let gsUrl        = localStorage.getItem(GK) || '';
+let maxDay       = parseInt(localStorage.getItem(MK) || '5');
 
 let editId = null, detailsOpen = false;
 let fU = 3, fI = 3, fE = 'low', fStatus = 'todo';
@@ -423,8 +442,9 @@ let allFilter = 'all';
 
 const CL_COLORS = ['#6b9478','#8a6b7e','#5e8e90','#9e7e4a','#7a6e9e','#7a8a6b','#6b7a8e','#8e6b6b'];
 
-const save    = () => localStorage.setItem(SK, JSON.stringify(tasks));
-const saveCl  = () => localStorage.setItem(CK, JSON.stringify(clients));
+const save    = () => localStorage.setItem(SK,  JSON.stringify(tasks));
+const saveCl  = () => localStorage.setItem(CK,  JSON.stringify(clients));
+const saveCN  = () => localStorage.setItem(CNK, JSON.stringify(clientNotes));
 const td      = () => new Date().toISOString().split('T')[0];
 
 /* ═══════════════════════════════════════════
@@ -1136,7 +1156,11 @@ function addSubtask(tid) {
     // update sub-progress bar if visible
     updateSubProgress(tid, t);
   }
-  inp.focus();
+  // always keep focus on input
+  setTimeout(() => {
+    const freshInp = document.getElementById('sub-inp-'+tid);
+    if (freshInp) freshInp.focus();
+  }, 0);
 }
 
 function updateSubProgress(tid, t) {
@@ -1150,9 +1174,20 @@ function updateSubProgress(tid, t) {
 }
 function setSubDate(tid, si, val) {
   const t = tasks.find(t => t.id === tid);
-  if (t && t.subtasks && t.subtasks[si] !== undefined) {
-    t.subtasks[si].dueDate = val || null;
-    save(); renderAll2(); scheduleAutoSync();
+  if (!t || !t.subtasks || t.subtasks[si] === undefined) return;
+  t.subtasks[si].dueDate = val || null;
+  save(); scheduleAutoSync();
+  // surgical: update badge in row
+  const row = document.getElementById('sub-row-'+tid+'-'+si);
+  if (row) {
+    let badge = row.querySelector('.sub-due');
+    if (val) {
+      const today = new Date().toISOString().split('T')[0];
+      const overdue = val < today;
+      if (!badge) { badge = document.createElement('span'); badge.className='sub-due'; row.insertBefore(badge, row.querySelector('.sub-date-inp')); }
+      badge.className = 'sub-due' + (overdue?' overdue':'');
+      badge.textContent = (overdue?'! ':'') + val;
+    } else if (badge) badge.remove();
   }
 }
 function saveNote(tid) {
@@ -1401,9 +1436,7 @@ function renderToday() {
     if (pending.length)  html += '<div class="section-label">do zrobienia</div>' + pending.map(t => taskHTML(t,false)).join('');
     if (remaining.length) html += '<div class="section-label">następne w kolejce</div>' + remaining.slice(0,done===dayList.length?5:2).map(t => taskHTML(t,true)).join('');
     if (finished.length) html += '<div class="section-label">ukończone</div>' + finished.map(t => taskHTML(t,false)).join('');
-    const waiting = tasks.filter(t => t.status==='waiting' && !t.done);
-    if (waiting.length) html += '<div class="section-label">czekam na</div>' + waiting.map(t => taskHTML(t,false)).join('');
-    else if (tasks.some(t=>!t.done)) html += '<div class="section-label">czekam na</div><div style="font-size:13px;color:var(--text3);padding:8px 2px">Brak — świetnie!</div>';
+
   }
   document.getElementById('today-content').innerHTML = html;
   updateHeroProgress();
@@ -1421,19 +1454,67 @@ function renderAll() {
 }
 
 function renderClients() {
-  document.getElementById('clients-content').innerHTML = clients.map((c,i) => {
-    const count   = tasks.filter(t => t.client===c).length;
-    const pending = tasks.filter(t => t.client===c && !t.done).length;
+  document.getElementById('clients-content').innerHTML = clients.map((cl,i) => {
+    const count   = tasks.filter(t => t.client===cl).length;
+    const pending = tasks.filter(t => t.client===cl && !t.done).length;
     const color   = CL_COLORS[i % CL_COLORS.length];
-    return `<div class="client-row">
-      <div class="client-dot" style="background:${color}"></div>
-      <div style="flex:1">
-        <div class="client-name-txt">${c}</div>
-        <div class="client-meta">${count} zadań · ${pending} otwartych</div>
+    const notes   = clientNotes[cl] || [];
+    const bulletsHTML = notes.length
+      ? `<ul class="bullet-list">${notes.map((n,ni) => `
+          <li class="bullet-item">
+            <div class="bullet-dot"></div>
+            <span style="flex:1">${n}</span>
+            <button class="bullet-del" onclick="deleteBullet('${cl}',${ni})">×</button>
+          </li>`).join('')}</ul>`
+      : '<div style="font-size:12px;color:var(--text3);margin-bottom:8px">Brak notatek.</div>';
+    return `<div class="client-card" id="client-card-${i}">
+      <div class="client-card-header" onclick="toggleClientCard(${i})">
+        <div class="client-dot" style="background:${color}"></div>
+        <div style="flex:1">
+          <div class="client-name-txt">${cl}</div>
+          <div class="client-meta">${count} zadań · ${pending} otwartych${notes.length?' · '+notes.length+' notatek':''}</div>
+        </div>
+        <button class="client-del" onclick="event.stopPropagation();deleteCl('${cl}')">×</button>
       </div>
-      <button class="client-del" onclick="deleteCl('${c}')">×</button>
+      <div class="client-card-body" id="client-body-${i}">
+        <div class="remember-label">Remember</div>
+        ${bulletsHTML}
+        <div class="add-bullet-row">
+          <input type="text" placeholder="Dodaj notatkę…" id="bullet-inp-${i}"
+            onkeydown="if(event.key==='Enter')addBullet('${cl}',${i})">
+          <button class="add-bullet-btn" onclick="addBullet('${cl}',${i})">+ Dodaj</button>
+        </div>
+      </div>
     </div>`;
   }).join('');
+}
+
+function toggleClientCard(i) {
+  const body = document.getElementById('client-body-'+i);
+  if (!body) return;
+  body.classList.toggle('open');
+  if (body.classList.contains('open'))
+    setTimeout(() => document.getElementById('bullet-inp-'+i)?.focus(), 150);
+}
+
+function addBullet(cl, i) {
+  const inp = document.getElementById('bullet-inp-'+i);
+  const val = inp.value.trim(); if (!val) return;
+  if (!clientNotes[cl]) clientNotes[cl] = [];
+  clientNotes[cl].push(val);
+  saveCN(); inp.value = '';
+  renderClients();
+  // reopen card
+  setTimeout(() => {
+    const body = document.getElementById('client-body-'+i);
+    if (body) { body.classList.add('open'); document.getElementById('bullet-inp-'+i)?.focus(); }
+  }, 0);
+}
+
+function deleteBullet(cl, ni) {
+  if (!clientNotes[cl]) return;
+  clientNotes[cl].splice(ni, 1);
+  saveCN(); renderClients();
 }
 
 function renderSettings() {
@@ -1442,13 +1523,103 @@ function renderSettings() {
   document.getElementById('max5').className = 'toggle-btn' + (maxDay===5 ? ' sel-e' : '');
 }
 
-function renderAll2() { renderToday(); renderAll(); renderClients(); renderSettings(); }
+function renderPlans() {
+  const today = td();
+  // Future tasks (due date in future)
+  const future = tasks
+    .filter(t => !t.done && t.status !== 'waiting' && t.dueDate && t.dueDate > today)
+    .sort((a,b) => a.dueDate.localeCompare(b.dueDate));
+  // Blocked tasks (waiting)
+  const waiting = tasks.filter(t => !t.done && t.status === 'waiting');
+
+  let html = '';
+
+  if (!future.length && !waiting.length) {
+    html = `<div class="empty" style="padding-top:2rem">
+      <div class="empty-icon">◈</div>
+      <div class="empty-title">Brak planów i zablokowanych</div>
+      <div class="empty-sub">Zadania z przyszłą datą i "czekam na" pojawią się tutaj.</div>
+    </div>`;
+  } else {
+    if (future.length) {
+      html += '<div class="section-label">zaplanowane</div>';
+      // group by date
+      const byDate = {};
+      future.forEach(t => { if(!byDate[t.dueDate]) byDate[t.dueDate]=[];  byDate[t.dueDate].push(t); });
+      Object.entries(byDate).forEach(([date, dayTasks]) => {
+        const d = new Date(date);
+        const label = d.toLocaleDateString('pl-PL',{weekday:'short',day:'numeric',month:'short'});
+        html += `<div style="font-size:11px;font-weight:600;color:var(--text3);margin:10px 0 5px;letter-spacing:.04em">${label.toUpperCase()}</div>`;
+        html += dayTasks.map(t => planTaskHTML(t)).join('');
+      });
+    }
+    if (waiting.length) {
+      html += '<div class="section-label" style="margin-top:18px">zablokowane — czekam na</div>';
+      html += waiting.map(t => planTaskHTML(t, true)).join('');
+    }
+  }
+  document.getElementById('plans-content').innerHTML = html;
+}
+
+function planTaskHTML(t, showUnlock=false) {
+  const cc = CL_COLORS[clients.indexOf(t.client) % CL_COLORS.length] || '#6b9478';
+  const sp = subProg(t);
+  const subProgHTML = sp
+    ? `<div class="sub-prog" style="margin-top:4px"><div class="sub-prog-track"><div class="sub-prog-fill" style="width:${Math.round(sp.d/sp.total*100)}%"></div></div><span class="sub-prog-txt">${sp.d}/${sp.total}</span></div>`
+    : '';
+  const waitingFor = t.waitingFor ? `<span class="chip chip-waiting">czekam: ${t.waitingFor}</span>` : '';
+  const dueChip = t.dueDate ? `<span class="chip chip-due">${t.dueDate}</span>` : '';
+  const unlockBtn = showUnlock
+    ? `<button class="tact-btn primary" style="margin-top:8px;font-size:12px" onclick="unlockTask('${t.id}')">Odblokuj →</button>`
+    : `<button class="tact-btn primary" style="margin-top:8px;font-size:12px" onclick="moveToToday('${t.id}')">Zrób dziś</button>`;
+
+  return `<div class="task-card-wrap" style="margin-bottom:8px">
+  <div class="task-card" id="ptc-${t.id}" style="border-radius:14px">
+    <div style="padding:12px 14px">
+      <div style="display:flex;align-items:flex-start;gap:10px">
+        <div style="flex:1;min-width:0">
+          <div class="task-name">${t.name}</div>
+          <div class="task-chips" style="margin-top:4px">
+            <span class="chip chip-client" style="background:${cc}18;color:${cc};border:.5px solid ${cc}40">${t.client||'–'}</span>
+            ${dueChip}${waitingFor}
+          </div>
+          ${subProgHTML}
+        </div>
+        <button class="edit-inline-btn" onclick="editTask('${t.id}')" title="Edytuj">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
+      </div>
+      ${unlockBtn}
+    </div>
+  </div>
+</div>`;
+}
+
+function unlockTask(id) {
+  const t = tasks.find(t => t.id === id);
+  if (!t) return;
+  t.status = 'todo';
+  t.waitingFor = null;
+  t.dayAssigned = null;
+  save(); renderAll2(); scheduleAutoSync();
+}
+
+function moveToToday(id) {
+  const t = tasks.find(t => t.id === id);
+  if (!t) return;
+  t.dueDate = td();
+  t.dayAssigned = td();
+  save(); renderAll2(); scheduleAutoSync();
+}
+
+function renderAll2() { renderToday(); renderAll(); renderPlans(); renderClients(); renderSettings(); }
 
 function switchTab(tab, el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
   if (el) el.classList.add('active');
+  else document.querySelectorAll('.nav-btn').forEach(b => { if(b.getAttribute('onclick')?.includes("'"+tab+"'")) b.classList.add('active'); });
   renderAll2();
 }
 
