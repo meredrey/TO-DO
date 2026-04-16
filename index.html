@@ -55,9 +55,14 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
 .section-label:first-child{margin-top:0}
 
 /* ── TASK CARD ── */
-.task-card{background:var(--bg);border:.5px solid var(--bd);border-radius:14px;margin-bottom:8px;overflow:hidden;transition:border-color .15s}
+.task-card-wrap{position:relative;margin-bottom:8px;border-radius:14px;overflow:hidden}
+.task-card-actions{position:absolute;right:0;top:0;bottom:0;display:flex;align-items:stretch}
+.task-card-swipe-done{background:var(--sage);color:white;border:none;cursor:pointer;padding:0 16px;font-size:12px;font-weight:500}
+.task-card-swipe-del{background:var(--rose);color:white;border:none;cursor:pointer;padding:0 14px;font-size:16px}
+.task-card{background:var(--bg);border:.5px solid var(--bd);border-radius:14px;overflow:hidden;transition:transform .2s ease,border-color .15s;position:relative;z-index:1}
 .task-card:hover{border-color:var(--bd2)}
 .task-card.done-card{opacity:.5}
+.task-card.swiped{transform:translateX(-110px)}
 .task-main{display:flex;gap:10px;padding:12px 14px;align-items:flex-start;cursor:pointer}
 .check-circle{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--bd2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .18s;background:transparent;flex-shrink:0;margin-top:2px}
 .check-circle.done-check{background:var(--sage);border-color:var(--sage)}
@@ -82,11 +87,12 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
 .chip-has-links{background:var(--teal-l);color:var(--teal)}
 .chip-energy-low{background:var(--sage-l);color:var(--sage-d)}
 .chip-energy-high{background:var(--rose-l);color:var(--rose)}
-.task-expand-btn{background:none;border:none;cursor:pointer;color:var(--text3);padding:0 0 0 6px;display:flex;align-items:center;flex-shrink:0;margin-top:2px}
+.task-expand-btn{background:none;border:none;cursor:pointer;color:var(--text3);padding:6px;margin:-6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;min-width:36px;min-height:36px;border-radius:8px;transition:background .15s}
+.task-expand-btn:hover{background:var(--bg2)}
 .task-expand-btn svg{width:14px;height:14px;transition:transform .2s}
-.edit-inline-btn{background:none;border:none;cursor:pointer;color:var(--text3);padding:0;display:flex;align-items:center;transition:color .15s}
-.edit-inline-btn:hover{color:var(--sage)}
-.edit-inline-btn svg{width:13px;height:13px}
+.edit-inline-btn{background:none;border:none;cursor:pointer;color:var(--text3);padding:6px;margin:-6px;display:flex;align-items:center;justify-content:center;transition:color .15s;min-width:36px;min-height:36px;border-radius:8px}
+.edit-inline-btn:hover{color:var(--sage);background:var(--sage-l)}
+.edit-inline-btn svg{width:14px;height:14px}
 .task-expand-btn.open svg{transform:rotate(180deg)}
 .sub-prog{display:flex;align-items:center;gap:6px;margin-top:4px}
 .sub-prog-track{flex:1;height:3px;background:var(--bd);border-radius:2px;overflow:hidden}
@@ -232,7 +238,10 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
   <div class="hero-wrap" id="hero-wrap">
     <canvas id="hero-canvas"></canvas>
     <div class="hero-overlay">
-      <div class="hero-progress-label">postęp dnia</div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">
+        <div class="hero-progress-label">postęp dnia</div>
+        <div id="hero-time-total" style="font-size:11px;font-weight:500;color:rgba(255,255,255,.65);letter-spacing:.03em"></div>
+      </div>
       <div class="hero-progress-track"><div class="hero-progress-fill" id="hero-prog-fill" style="width:0%"></div></div>
     </div>
     <div class="hero-frac" id="hero-frac">0/0</div>
@@ -647,6 +656,16 @@ function updateHeroProgress() {
   if (pct === 100 && total > 0) hint.textContent = 'Dzień ukończony! ✓';
   else if (pct > 0) hint.textContent = pct + '% gotowe';
   else hint.textContent = total > 0 ? 'Zacznij dzień!' : '';
+  // total planned time
+  const pendingTasks = dayTasks.filter(t => !t.done && t.estTime);
+  const totalMin = pendingTasks.reduce((s,t) => s + (t.estTime||0), 0);
+  const timeEl = document.getElementById('hero-time-total');
+  if (timeEl) {
+    if (totalMin > 0) {
+      const h = Math.floor(totalMin/60), m = totalMin%60;
+      timeEl.textContent = h>0 ? h+'h'+(m?m+'min':'') + ' pozostało' : m+'min pozostało';
+    } else timeEl.textContent = '';
+  }
 }
 
 /* ═══════════════════════════════════════════
@@ -835,7 +854,16 @@ function taskHTML(t, showAdd) {
     ? `<div class="sub-prog"><div class="sub-prog-track"><div class="sub-prog-fill" style="width:${Math.round(sp.d/sp.total*100)}%"></div></div><span class="sub-prog-txt">${sp.d}/${sp.total}</span></div>`
     : '';
 
-  return `<div class="task-card${t.done?' done-card':''}" id="tc-${t.id}">
+  return `<div class="task-card-wrap" id="tcw-${t.id}">
+  <div class="task-card-actions">
+    <button class="task-card-swipe-done" onclick="swipeDone('${t.id}')">${t.done?'Cofnij':'Gotowe'}</button>
+    <button class="task-card-swipe-del" onclick="swipeDel('${t.id}')">×</button>
+  </div>
+  <div class="task-card${t.done?' done-card':''}" id="tc-${t.id}"
+    data-swipe-tid="${t.id}"
+    ontouchstart="swipeStart(event,'${t.id}')"
+    ontouchmove="swipeMove(event,'${t.id}')"
+    ontouchend="swipeEnd(event,'${t.id}')">
   <div class="task-main" onclick="toggleExpand('${t.id}',event)">
     <div class="check-circle${t.done?' done-check':''}" onclick="toggleDone('${t.id}',event)">
       <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="white" stroke-width="2.2"><polyline points="2,6 5,9 10,3"/></svg>
@@ -868,8 +896,7 @@ function taskHTML(t, showAdd) {
   <div class="task-detail" id="det-${t.id}">
     <div class="detail-tabs">
       <button class="dtab active" onclick="switchDtab('${t.id}','subs',this)">Podzadania</button>
-      <button class="dtab" onclick="switchDtab('${t.id}','note',this)">Notatka</button>
-      <button class="dtab" onclick="switchDtab('${t.id}','links',this)">Linki</button>
+      <button class="dtab" onclick="switchDtab('${t.id}','more',this)">Notatka ${hasNote?'·':''} ${hasLinks?t.links.length+' link'+(t.links.length>1?'i':''):''}${!hasNote&&!hasLinks?'i linki':''}</button>
     </div>
 
     <div class="dtab-content active" id="dt-subs-${t.id}">
@@ -882,7 +909,7 @@ function taskHTML(t, showAdd) {
                 ? `<span class="sub-due${sOverdue?' overdue':''}">${sOverdue?'! ':''}${s.dueDate}</span>`
                 : '';
               return `
-            <div class="subtask-item">
+            <div class="subtask-item" id="sub-row-${t.id}-${si}">
               <div class="sub-check${s.done?' done':''}" onclick="toggleSub('${t.id}',${si})">
                 <svg viewBox="0 0 10 10" fill="none" stroke="white" stroke-width="2"><polyline points="1.5,5 4,7.5 8.5,2.5"/></svg>
               </div>
@@ -905,16 +932,14 @@ function taskHTML(t, showAdd) {
       </div>
     </div>
 
-    <div class="dtab-content" id="dt-note-${t.id}">
+    <div class="dtab-content" id="dt-more-${t.id}">
       ${t.status==='waiting' && t.waitingFor ? `<div class="waiting-note">Czekam na: ${t.waitingFor}</div>` : ''}
-      <textarea class="note-area" id="note-${t.id}" placeholder="Notatki, kontekst, szczegóły…" style="margin-top:8px">${t.note||''}</textarea>
-      <div style="display:flex;align-items:center;gap:10px;margin-top:7px">
-        <button class="note-save-btn" onclick="saveNote('${t.id}')">Zapisz</button>
-        <span class="note-saved" id="note-saved-${t.id}">Zapisano ✓</span>
-      </div>
+      <textarea class="note-area" id="note-${t.id}" placeholder="Notatki, kontekst, szczegóły…" style="margin-top:8px"
+        onblur="saveNote('${t.id}')">${t.note||''}</textarea>
+      <span class="note-saved" id="note-saved-${t.id}" style="font-size:11px;color:var(--sage);margin-top:4px;display:none">Zapisano ✓</span>
     </div>
 
-    <div class="dtab-content" id="dt-links-${t.id}">
+    <div id="dt-links-inner-${t.id}">
       <div class="links-list" id="links-list-${t.id}">${linkHTML(t)}</div>
       <div id="lfw-${t.id}">
         <button class="show-link-form-btn" onclick="showLinkForm('${t.id}')">
@@ -943,10 +968,58 @@ function taskHTML(t, showAdd) {
 }
 
 /* ═══════════════════════════════════════════
+   SWIPE GESTURES
+═══════════════════════════════════════════ */
+let swipeStartX = 0, swipeActive = null;
+
+function swipeStart(e, tid) {
+  swipeStartX = e.touches[0].clientX;
+  swipeActive = tid;
+}
+function swipeMove(e, tid) {
+  if (swipeActive !== tid) return;
+  const dx = swipeStartX - e.touches[0].clientX;
+  const card = document.getElementById('tc-'+tid);
+  if (!card) return;
+  if (dx > 10) e.preventDefault();
+  card.style.transform = dx > 0 ? `translateX(${Math.min(-dx, -110)}px)` : '';
+}
+function swipeEnd(e, tid) {
+  if (swipeActive !== tid) return;
+  swipeActive = null;
+  const dx = swipeStartX - (e.changedTouches[0]?.clientX || swipeStartX);
+  const card = document.getElementById('tc-'+tid);
+  if (!card) return;
+  if (dx > 60) {
+    card.classList.add('swiped');
+  } else {
+    card.style.transform = '';
+    card.classList.remove('swiped');
+  }
+}
+function swipeDone(tid) {
+  const card = document.getElementById('tc-'+tid);
+  if (card) { card.style.transform=''; card.classList.remove('swiped'); }
+  const t = tasks.find(t=>t.id===tid);
+  if (!t) return;
+  const wasDone = t.done;
+  t.done = !t.done; save();
+  if (!wasDone) { const idx=tasks.indexOf(t); if(idx>=0&&idx<COLS*ROWS) explodeTile(idx); }
+  renderAll2(); scheduleAutoSync();
+}
+function swipeDel(tid) {
+  const card = document.getElementById('tc-'+tid);
+  if (card) { card.style.transform=''; card.classList.remove('swiped'); }
+  if (!confirm('Usunąć zadanie?')) return;
+  tasks = tasks.filter(t=>t.id!==tid);
+  save(); syncTiles(); scheduleRender(); renderAll2(); scheduleAutoSync();
+}
+
+/* ═══════════════════════════════════════════
    INTERACTIONS
 ═══════════════════════════════════════════ */
 function switchDtab(tid, tab, btn) {
-  ['subs','note','links'].forEach(t => {
+  ['subs','more'].forEach(t => {
     document.getElementById('dt-'+t+'-'+tid)?.classList.toggle('active', t===tab);
   });
   btn.closest('.detail-tabs').querySelectorAll('.dtab').forEach(b => b.classList.remove('active'));
@@ -954,8 +1027,7 @@ function switchDtab(tid, tab, btn) {
 }
 
 function toggleExpand(id, e) {
-  // let clicks on interactive elements pass through — do NOT swallow them
-  if (e.target.closest('.check-circle,.add-sub-row,.sub-check,.sub-del,.add-sub-btn,.sub-date-inp,.note-area,.note-save-btn,.dtab,.show-link-form-btn,.add-link-form,.link-open,.link-del,.btn-add-link,.btn-cancel-lf,.tact-btn,.task-expand-btn,.edit-inline-btn')) return;
+  if (e.target.closest('.check-circle,.add-sub-row,.sub-check,.sub-del,.add-sub-btn,.sub-date-inp,.note-area,.note-save-btn,.dtab,.show-link-form-btn,.add-link-form,.link-open,.link-del,.btn-add-link,.btn-cancel-lf,.tact-btn,.task-expand-btn,.edit-inline-btn,.task-card-actions')) return;
   const det = document.getElementById('det-'+id);
   const btn = document.getElementById('exp-'+id);
   const open = !det.classList.contains('open');
@@ -980,22 +1052,101 @@ function toggleDone(id, e) {
 
 function toggleSub(tid, si) {
   const t = tasks.find(t => t.id === tid);
-  if (t && t.subtasks) { t.subtasks[si].done = !t.subtasks[si].done; save(); renderAll2(); scheduleAutoSync(); }
+  if (!t || !t.subtasks) return;
+  t.subtasks[si].done = !t.subtasks[si].done;
+  save(); scheduleAutoSync();
+  // surgical update
+  const row = document.getElementById('sub-row-'+tid+'-'+si);
+  if (row) {
+    const check = row.querySelector('.sub-check');
+    const name  = row.querySelector('.subtask-name');
+    if (t.subtasks[si].done) { check?.classList.add('done'); name?.classList.add('done'); }
+    else { check?.classList.remove('done'); name?.classList.remove('done'); }
+  }
+  updateSubProgress(tid, t);
 }
 function deleteSub(tid, si) {
   const t = tasks.find(t => t.id === tid);
-  if (t && t.subtasks) { t.subtasks.splice(si,1); save(); renderAll2(); scheduleAutoSync(); }
+  if (!t || !t.subtasks) return;
+  t.subtasks.splice(si, 1);
+  save(); scheduleAutoSync();
+  // full re-render of subtask list only (indices shift after splice)
+  rerenderSubList(tid, t);
+}
+
+function rerenderSubList(tid, t) {
+  const list = document.getElementById('subs-list-'+tid);
+  if (!list) return;
+  if (!t.subtasks || !t.subtasks.length) {
+    list.innerHTML = '<div style="font-size:13px;color:var(--text3);padding:4px 0 8px">Brak podzadań.</div>';
+    return;
+  }
+  list.innerHTML = t.subtasks.map((s,si) => {
+    const sOverdue = s.dueDate && s.dueDate < new Date().toISOString().split('T')[0];
+    const dueBadge = s.dueDate ? `<span class="sub-due${sOverdue?' overdue':''}">${sOverdue?'! ':''}${s.dueDate}</span>` : '';
+    return `<div class="subtask-item" id="sub-row-${tid}-${si}">
+      <div class="sub-check${s.done?' done':''}" onclick="toggleSub('${tid}',${si})">
+        <svg viewBox="0 0 10 10" fill="none" stroke="white" stroke-width="2"><polyline points="1.5,5 4,7.5 8.5,2.5"/></svg>
+      </div>
+      <span class="subtask-name${s.done?' done':''}" style="flex:1">${s.name}</span>
+      ${dueBadge}
+      <input type="date" class="sub-date-inp" value="${s.dueDate||''}"
+        onchange="setSubDate('${tid}',${si},this.value)"
+        style="width:36px;padding:2px 4px;opacity:${s.dueDate?'1':'.4'};cursor:pointer"
+        onfocus="this.style.width='130px';this.style.opacity='1'"
+        onblur="this.style.width='36px';this.style.opacity=this.value?'1':'.4'">
+      <button class="sub-del" onclick="deleteSub('${tid}',${si})">×</button>
+    </div>`;
+  }).join('');
+  updateSubProgress(tid, t);
 }
 function addSubtask(tid) {
   const inp = document.getElementById('sub-inp-'+tid);
   const val = inp.value.trim(); if (!val) return;
   const t = tasks.find(t => t.id === tid);
-  if (t) {
-    if (!t.subtasks) t.subtasks = [];
-    t.subtasks.push({ name:val, done:false, dueDate:null });
-    save(); renderAll2(); scheduleAutoSync();
-    setTimeout(() => { document.getElementById('sub-inp-'+tid)?.focus(); }, 50);
+  if (!t) return;
+  if (!t.subtasks) t.subtasks = [];
+  const si = t.subtasks.length;
+  t.subtasks.push({ name:val, done:false, dueDate:null });
+  save(); scheduleAutoSync();
+  inp.value = '';
+
+  // surgical DOM update — just append new subtask row, keep detail open
+  const list = document.getElementById('subs-list-'+tid);
+  if (list) {
+    // remove "brak podzadań" placeholder if present
+    const placeholder = list.querySelector('div[style]');
+    if (placeholder) placeholder.remove();
+    // append new row
+    const row = document.createElement('div');
+    row.className = 'subtask-item';
+    row.id = 'sub-row-'+tid+'-'+si;
+    row.innerHTML = `
+      <div class="sub-check" onclick="toggleSub('${tid}',${si})">
+        <svg viewBox="0 0 10 10" fill="none" stroke="white" stroke-width="2"><polyline points="1.5,5 4,7.5 8.5,2.5"/></svg>
+      </div>
+      <span class="subtask-name" style="flex:1">${val}</span>
+      <input type="date" class="sub-date-inp" value=""
+        onchange="setSubDate('${tid}',${si},this.value)"
+        style="width:36px;padding:2px 4px;opacity:.4;cursor:pointer"
+        onfocus="this.style.width='130px';this.style.opacity='1'"
+        onblur="this.style.width='36px';this.style.opacity=this.value?'1':'.4'">
+      <button class="sub-del" onclick="deleteSub('${tid}',${si})">×</button>`;
+    list.appendChild(row);
+    // update sub-progress bar if visible
+    updateSubProgress(tid, t);
   }
+  inp.focus();
+}
+
+function updateSubProgress(tid, t) {
+  const prog = document.querySelector('#tc-'+tid+' .sub-prog-fill');
+  const txt  = document.querySelector('#tc-'+tid+' .sub-prog-txt');
+  if (!t.subtasks || !t.subtasks.length) return;
+  const done = t.subtasks.filter(s=>s.done).length;
+  const pct  = Math.round(done/t.subtasks.length*100);
+  if (prog) prog.style.width = pct+'%';
+  if (txt)  txt.textContent  = done+'/'+t.subtasks.length;
 }
 function setSubDate(tid, si, val) {
   const t = tasks.find(t => t.id === tid);
@@ -1006,12 +1157,22 @@ function setSubDate(tid, si, val) {
 }
 function saveNote(tid) {
   const t = tasks.find(t => t.id === tid);
-  if (t) {
-    t.note = document.getElementById('note-'+tid).value;
-    save(); scheduleAutoSync();
-    const s = document.getElementById('note-saved-'+tid);
-    if (s) { s.style.display='inline'; setTimeout(() => s.style.display='none', 1800); }
+  if (!t) return;
+  t.note = document.getElementById('note-'+tid).value;
+  save(); scheduleAutoSync();
+  // update hasNote chip surgically
+  const card = document.getElementById('tc-'+tid);
+  if (card) {
+    const chips = card.querySelector('.task-chips');
+    if (chips) {
+      let noteChip = chips.querySelector('.chip-has-note');
+      if (t.note && t.note.trim()) {
+        if (!noteChip) { noteChip = document.createElement('span'); noteChip.className='chip chip-has-note'; noteChip.textContent='notatka'; chips.appendChild(noteChip); }
+      } else { if (noteChip) noteChip.remove(); }
+    }
   }
+  const s = document.getElementById('note-saved-'+tid);
+  if (s) { s.style.display='inline'; setTimeout(() => s.style.display='none', 1800); }
 }
 function showLinkForm(id) {
   document.getElementById('lf-'+id).style.display = 'block';
@@ -1028,11 +1189,41 @@ function addLink(tid) {
   if (!url) return;
   if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
   const t = tasks.find(t => t.id === tid);
-  if (t) { if (!t.links) t.links=[]; t.links.push({label,url}); save(); renderAll2(); scheduleAutoSync(); }
+  if (!t) return;
+  if (!t.links) t.links = [];
+  const li = t.links.length;
+  t.links.push({label, url});
+  save(); scheduleAutoSync();
+  document.getElementById('lfl-'+tid).value = '';
+  document.getElementById('lfu-'+tid).value = '';
+  hideLinkForm(tid);
+  // surgical DOM append
+  const list = document.getElementById('links-list-'+tid);
+  if (list) {
+    const row = document.createElement('div');
+    row.className = 'link-item';
+    row.id = 'link-row-'+tid+'-'+li;
+    row.innerHTML = `<div class="link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></div>
+      <div class="link-body"><div class="link-label">${label||url}</div><div class="link-url">${url}</div></div>
+      <a class="link-open" href="${url}" target="_blank" rel="noopener">Otwórz</a>
+      <button class="link-del" onclick="deleteLink('${tid}',${li})">×</button>`;
+    list.appendChild(row);
+  }
 }
 function deleteLink(tid, li) {
   const t = tasks.find(t => t.id === tid);
-  if (t && t.links) { t.links.splice(li,1); save(); renderAll2(); scheduleAutoSync(); }
+  if (!t || !t.links) return;
+  t.links.splice(li, 1); save(); scheduleAutoSync();
+  const list = document.getElementById('links-list-'+tid);
+  if (list) {
+    list.innerHTML = t.links.map((l,i) => `
+      <div class="link-item" id="link-row-${tid}-${i}">
+        <div class="link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></div>
+        <div class="link-body"><div class="link-label">\${l.label||l.url}</div><div class="link-url">\${l.url}</div></div>
+        <a class="link-open" href="\${l.url}" target="_blank" rel="noopener">Otwórz</a>
+        <button class="link-del" onclick="deleteLink('${tid}',\${i})">×</button>
+      </div>`).join('');
+  }
 }
 function addToDay(id) {
   const t = tasks.find(t => t.id === id);
@@ -1191,16 +1382,28 @@ function renderToday() {
   const { dayList, remaining } = getDayList();
   const done = dayList.filter(t => t.done).length;
   let html = '';
+  // Friday weekly review prompt
+  const isFriday = new Date().getDay() === 5;
+  if (isFriday) {
+    html += `<div style="background:var(--amber-l);border-radius:12px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <div>
+        <div style="font-size:12px;font-weight:500;color:var(--amber)">Piątek — czas na weekly review</div>
+        <div style="font-size:11px;color:var(--amber);opacity:.8;margin-top:2px">Przejrzyj backlog i zaplanuj przyszły tydzień</div>
+      </div>
+      <button onclick="weeklyReview()" style="font-size:12px;padding:6px 12px;background:var(--amber);color:white;border:none;border-radius:8px;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0">Uruchom</button>
+    </div>`;
+  }
   if (!dayList.length) {
-    html = `<div class="empty"><div class="empty-icon">✦</div><div class="empty-title">Brak zadań na dziś</div><div class="empty-sub">Dodaj pierwsze zadanie przyciskiem poniżej.</div></div>`;
+    html += `<div class="empty"><div class="empty-icon">✦</div><div class="empty-title">Brak zadań na dziś</div><div class="empty-sub">Dodaj pierwsze zadanie przyciskiem poniżej.</div></div>`;
   } else {
     const pending  = dayList.filter(t => !t.done);
     const finished = dayList.filter(t =>  t.done);
     if (pending.length)  html += '<div class="section-label">do zrobienia</div>' + pending.map(t => taskHTML(t,false)).join('');
-    if (remaining.length && done===dayList.length) html += '<div class="section-label">następne w kolejce</div>' + remaining.slice(0,3).map(t => taskHTML(t,true)).join('');
+    if (remaining.length) html += '<div class="section-label">następne w kolejce</div>' + remaining.slice(0,done===dayList.length?5:2).map(t => taskHTML(t,true)).join('');
     if (finished.length) html += '<div class="section-label">ukończone</div>' + finished.map(t => taskHTML(t,false)).join('');
     const waiting = tasks.filter(t => t.status==='waiting' && !t.done);
-    if (waiting.length)  html += '<div class="section-label">czekam na</div>' + waiting.map(t => taskHTML(t,false)).join('');
+    if (waiting.length) html += '<div class="section-label">czekam na</div>' + waiting.map(t => taskHTML(t,false)).join('');
+    else if (tasks.some(t=>!t.done)) html += '<div class="section-label">czekam na</div><div style="font-size:13px;color:var(--text3);padding:8px 2px">Brak — świetnie!</div>';
   }
   document.getElementById('today-content').innerHTML = html;
   updateHeroProgress();
