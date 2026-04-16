@@ -292,14 +292,7 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
         <div><div class="settings-row-label">Weekly review</div><div class="settings-row-sub">resetuje przypisanie zadań do dnia</div></div>
         <button class="tact-btn" onclick="weeklyReview()">Uruchom</button>
       </div>
-      <div class="settings-row">
-        <div><div class="settings-row-label">Wyślij do Sheets</div><div class="settings-row-sub">nadpisz arkusz danymi z aplikacji</div></div>
-        <button class="tact-btn" onclick="syncAll()">Wyślij ↑</button>
-      </div>
-      <div class="settings-row">
-        <div><div class="settings-row-label">Pobierz z Sheets</div><div class="settings-row-sub">nadpisz aplikację danymi z arkusza</div></div>
-        <button class="tact-btn" onclick="loadFromSheets()">Pobierz ↓</button>
-      </div>
+
       <div class="settings-row">
         <div><div class="settings-row-label">Eksport JSON</div><div class="settings-row-sub">pobierz kopię zadań na dysk</div></div>
         <button class="tact-btn" onclick="exportJSON()">Pobierz ↓</button>
@@ -658,57 +651,67 @@ function updateHeroProgress() {
 
 /* ═══════════════════════════════════════════
    GOOGLE SHEETS SYNC
+   Strategy: GET requests only (no CORS issues)
+   - single task: upsert via GET
+   - full sync: sequential GET upserts
+   - auto-sync: debounced 3s after any change
 ═══════════════════════════════════════════ */
 function setSyncStatus(msg, type='') {
   const el = document.getElementById('sync-status');
   if (el) { el.textContent = msg; el.className = 'sync-status ' + type; }
 }
 
-// Wyślij jedno zadanie (upsert) — fire & forget
-// fire-and-forget single task upsert via POST no-cors
+// Debounce timer for auto-sync
+let syncTimer = null;
+
+// Called after every data change — triggers auto-sync after 3s idle
+function scheduleAutoSync() {
+  if (!gsUrl) return;
+  clearTimeout(syncTimer);
+  setSyncStatus('Niezapisane zmiany…');
+  syncTimer = setTimeout(() => syncAll(), 3000);
+}
+
+// Upsert single task via GET
 async function syncTask(task) {
   if (!gsUrl) return;
   try {
-    await fetch(gsUrl, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'upsert', task })
-    });
+    const url = gsUrl + '?action=upsert&data=' + encodeURIComponent(JSON.stringify(task));
+    await fetch(url);
   } catch(e) { /* silent */ }
 }
 
-// Full sync: POST no-cors (fire), then verify via GET
+// Full sync: send all tasks one by one via GET, then verify
 async function syncAll() {
   if (!gsUrl) { setSyncStatus('Brak URL — ustaw Apps Script URL w ustawieniach.', 'err'); return; }
-  setSyncStatus('Wysyłam…');
+  clearTimeout(syncTimer);
+  setSyncStatus('Synchronizuję…');
   try {
-    // POST via no-cors — gets through without preflight
-    await fetch(gsUrl, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'syncAll', tasks, clients })
-    });
-    // wait a moment then verify via GET
-    setSyncStatus('Weryfikuję…');
-    await new Promise(r => setTimeout(r, 2500));
-    const resp = await fetch(gsUrl + '?action=getTasks');
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const d = await resp.json();
-    const count = Array.isArray(d) ? d.length : 0;
-    if (count === 0 && tasks.length > 0) {
-      setSyncStatus('⚠ Sheets pusty — sprawdź autoryzację skryptu', 'err');
-    } else {
-      setSyncStatus('✓ Zsynchronizowano ' + count + ' zadań · ' + new Date().toLocaleTimeString('pl-PL'), 'ok');
+    const gs = gsUrl.split('?')[0];
+
+    // 1. reset sheet with clients info
+    await fetch(gs + '?action=syncAll&data=' + encodeURIComponent(JSON.stringify({ tasks: [], clients })));
+
+    // 2. upsert each task individually
+    let ok = 0;
+    for (const t of tasks) {
+      try {
+        const r = await fetch(gs + '?action=upsert&data=' + encodeURIComponent(JSON.stringify(t)));
+        const d = await r.json();
+        if (d.ok) ok++;
+      } catch(e) { /* continue */ }
     }
+
+    // 3. show result
+    const ts = new Date().toLocaleTimeString('pl-PL', {hour:'2-digit',minute:'2-digit'});
+    setSyncStatus('✓ ' + ok + '/' + tasks.length + ' zadań · ' + ts, 'ok');
   } catch(e) {
     setSyncStatus('Błąd: ' + e.message, 'err');
-    console.error('syncAll error:', e);
+    console.error('syncAll:', e);
   }
 }
 
-// Load from Sheets
+// Load all data from Sheets
 async function loadFromSheets() {
   if (!gsUrl) { setSyncStatus('Brak URL — ustaw Apps Script URL w ustawieniach.', 'err'); return; }
   setSyncStatus('Pobieram z Sheets…');
@@ -719,10 +722,11 @@ async function loadFromSheets() {
     if (data.error) throw new Error(data.error);
     if (Array.isArray(data.tasks) && data.tasks.length > 0) { tasks = data.tasks; save(); }
     if (Array.isArray(data.clients) && data.clients.length > 0) { clients = data.clients; saveCl(); }
-    setSyncStatus('✓ Pobrano ' + (data.tasks||[]).length + ' zadań · ' + new Date().toLocaleTimeString('pl-PL'), 'ok');
+    const ts = new Date().toLocaleTimeString('pl-PL', {hour:'2-digit',minute:'2-digit'});
+    setSyncStatus('✓ Pobrano ' + (data.tasks||[]).length + ' zadań · ' + ts, 'ok');
     renderAll2(); syncTiles(); scheduleRender();
   } catch(e) {
-    setSyncStatus('Błąd pobierania: ' + e.message, 'err');
+    setSyncStatus('Błąd: ' + e.message, 'err');
   }
 }
 
@@ -969,18 +973,18 @@ function toggleDone(id, e) {
   if (!wasDone) {
     const idx = tasks.indexOf(t);
     if (idx >= 0 && idx < COLS*ROWS) explodeTile(idx);
-    syncTask(t);
   }
   renderAll2();
+  scheduleAutoSync();
 }
 
 function toggleSub(tid, si) {
   const t = tasks.find(t => t.id === tid);
-  if (t && t.subtasks) { t.subtasks[si].done = !t.subtasks[si].done; save(); renderAll2(); }
+  if (t && t.subtasks) { t.subtasks[si].done = !t.subtasks[si].done; save(); renderAll2(); scheduleAutoSync(); }
 }
 function deleteSub(tid, si) {
   const t = tasks.find(t => t.id === tid);
-  if (t && t.subtasks) { t.subtasks.splice(si,1); save(); renderAll2(); }
+  if (t && t.subtasks) { t.subtasks.splice(si,1); save(); renderAll2(); scheduleAutoSync(); }
 }
 function addSubtask(tid) {
   const inp = document.getElementById('sub-inp-'+tid);
@@ -989,7 +993,7 @@ function addSubtask(tid) {
   if (t) {
     if (!t.subtasks) t.subtasks = [];
     t.subtasks.push({ name:val, done:false, dueDate:null });
-    save(); renderAll2();
+    save(); renderAll2(); scheduleAutoSync();
     setTimeout(() => { document.getElementById('sub-inp-'+tid)?.focus(); }, 50);
   }
 }
@@ -997,14 +1001,14 @@ function setSubDate(tid, si, val) {
   const t = tasks.find(t => t.id === tid);
   if (t && t.subtasks && t.subtasks[si] !== undefined) {
     t.subtasks[si].dueDate = val || null;
-    save(); renderAll2();
+    save(); renderAll2(); scheduleAutoSync();
   }
 }
 function saveNote(tid) {
   const t = tasks.find(t => t.id === tid);
   if (t) {
     t.note = document.getElementById('note-'+tid).value;
-    save(); syncTask(t);
+    save(); scheduleAutoSync();
     const s = document.getElementById('note-saved-'+tid);
     if (s) { s.style.display='inline'; setTimeout(() => s.style.display='none', 1800); }
   }
@@ -1024,20 +1028,20 @@ function addLink(tid) {
   if (!url) return;
   if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
   const t = tasks.find(t => t.id === tid);
-  if (t) { if (!t.links) t.links=[]; t.links.push({label,url}); save(); renderAll2(); }
+  if (t) { if (!t.links) t.links=[]; t.links.push({label,url}); save(); renderAll2(); scheduleAutoSync(); }
 }
 function deleteLink(tid, li) {
   const t = tasks.find(t => t.id === tid);
-  if (t && t.links) { t.links.splice(li,1); save(); renderAll2(); }
+  if (t && t.links) { t.links.splice(li,1); save(); renderAll2(); scheduleAutoSync(); }
 }
 function addToDay(id) {
   const t = tasks.find(t => t.id === id);
-  if (t) { t.dayAssigned = td(); save(); renderAll2(); }
+  if (t) { t.dayAssigned = td(); save(); renderAll2(); scheduleAutoSync(); }
 }
 function deleteTask(id) {
   if (!confirm('Usunąć zadanie?')) return;
   tasks = tasks.filter(t => t.id !== id);
-  save(); syncTiles(); scheduleRender(); renderAll2();
+  save(); syncTiles(); scheduleRender(); renderAll2(); scheduleAutoSync();
 }
 function deleteCl(name) {
   if (!confirm(`Usunąć "${name}"?`)) return;
@@ -1146,7 +1150,7 @@ function saveTask() {
     if (idx < COLS*ROWS) setTimeout(() => appearTile(idx), 80);
     syncTask(newTask);
   }
-  save(); closeModal(); renderAll2();
+  save(); closeModal(); renderAll2(); scheduleAutoSync();
 }
 
 /* ═══════════════════════════════════════════
