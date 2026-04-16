@@ -719,13 +719,23 @@ function qScore(t) {
   const u = t.urgency||1, i = t.importance||1;
   if (u>=2 && i>=2) return 4; if (i>=2) return 3; if (u>=2) return 2; return 1;
 }
+function effectiveDueDate(t) {
+  if (t.dueDate) return t.dueDate;
+  if (t.subtasks && t.subtasks.length) {
+    const dates = t.subtasks.map(s => s.dueDate).filter(Boolean).sort();
+    if (dates.length) return dates[0];
+  }
+  return null;
+}
+
 function taskScore(t) {
   if (t.status === 'waiting') return -1;
   let s = 0;
   if ((t.estTime||999) < 10) s += 100;
-  if (t.dueDate && t.dueDate < td()) s += 80;
-  if (t.dueDate === td()) s += 50;
-  if (!t.dueDate) s += 10;
+  const edd = effectiveDueDate(t);
+  if (edd && edd < td()) s += 80;
+  if (edd === td()) s += 50;
+  if (!edd) s += 10;
   s += qScore(t) * 10;
   return s;
 }
@@ -752,13 +762,13 @@ function getDayList() {
   const pending = tasks.filter(t =>
     !t.done &&
     t.status !== 'waiting' &&
-    (!t.dueDate || t.dueDate <= today)
+    (!effectiveDueDate(t) || effectiveDueDate(t) <= today)
   );
   const sorted = [...pending].sort((a,b) => taskScore(b) - taskScore(a));
 
   // already assigned today (and still eligible)
-  const aIds    = new Set(tasks.filter(t => t.dayAssigned===today && !t.done && (!t.dueDate || t.dueDate <= today)).map(t=>t.id));
-  const dayList = tasks.filter(t => t.dayAssigned===today && !t.done && (!t.dueDate || t.dueDate <= today));
+  const aIds    = new Set(tasks.filter(t => t.dayAssigned===today && !t.done && (!effectiveDueDate(t) || effectiveDueDate(t) <= today)).map(t=>t.id));
+  const dayList = tasks.filter(t => t.dayAssigned===today && !t.done && (!effectiveDueDate(t) || effectiveDueDate(t) <= today));
 
   // auto-fill up to maxDay
   for (const t of sorted) {
@@ -767,10 +777,8 @@ function getDayList() {
   }
   save();
 
-  // future tasks — shown separately
-  const future = tasks.filter(t => !t.done && t.status !== 'waiting' && t.dueDate && t.dueDate > today);
   const remaining = sorted.filter(t => !aIds.has(t.id));
-  return { dayList, remaining, future };
+  return { dayList, remaining };
 }
 
 /* ═══════════════════════════════════════════
@@ -793,7 +801,8 @@ function linkHTML(t) {
 function taskHTML(t, showAdd) {
   const cc = CL_COLORS[clients.indexOf(t.client) % CL_COLORS.length] || '#6b9478';
   const isQuick   = (t.estTime||999) < 10;
-  const isOverdue = t.dueDate && t.dueDate < td();
+  const eff = effectiveDueDate(t);
+  const isOverdue = eff && eff < td();
   const [qc, ql]  = qChip(t);
   const sp        = subProg(t);
   const hasNote   = t.note && t.note.trim().length > 0;
@@ -820,7 +829,7 @@ function taskHTML(t, showAdd) {
         ${isQuick ? '<span class="chip chip-quick">&lt;10min</span>' : ''}
         ${t.estTime && !isQuick ? `<span class="chip chip-time">${fmtTime(t.estTime)}</span>` : ''}
         ${hasNonDefaultPriority ? `<span class="chip ${qc}">${ql}</span>` : ''}
-        ${t.dueDate ? `<span class="chip ${isOverdue?'chip-overdue':'chip-due'}">${isOverdue?'! ':''}${t.dueDate}</span>` : ''}
+        ${eff ? `<span class="chip ${isOverdue?'chip-overdue':'chip-due'}">${isOverdue?'! ':''}${eff}${!t.dueDate?' *':''}</span>` : ''}
         ${t.status==='waiting' ? `<span class="chip chip-waiting">czekam: ${t.waitingFor||'?'}</span>` : ''}
         ${energyChip}
         ${hasNote  ? '<span class="chip chip-has-note">notatka</span>' : ''}
@@ -1104,8 +1113,9 @@ function saveTask() {
   if (editId) {
     const t = tasks.find(t => t.id === editId);
     if (t) {
-      // if dueDate changed to future, remove from today's list
-      if (dueDate && dueDate > td() && t.dayAssigned === td()) t.dayAssigned = null;
+      // if effective date is future, remove from today's list
+      const newEdd = dueDate || (t.subtasks||[]).map(s=>s.dueDate).filter(Boolean).sort()[0] || null;
+      if (newEdd && newEdd > td() && t.dayAssigned === td()) t.dayAssigned = null;
       Object.assign(t, {name,client,estTime,dueDate,urgency:fU,importance:fI,energy:fE,status:fStatus,waitingFor,note,updatedAt:Date.now()});
       syncTask(t);
     }
@@ -1129,10 +1139,10 @@ function saveTask() {
    RENDER
 ═══════════════════════════════════════════ */
 function renderToday() {
-  const { dayList, remaining, future } = getDayList();
+  const { dayList, remaining } = getDayList();
   const done = dayList.filter(t => t.done).length;
   let html = '';
-  if (!dayList.length && !future.length) {
+  if (!dayList.length) {
     html = `<div class="empty"><div class="empty-icon">✦</div><div class="empty-title">Brak zadań na dziś</div><div class="empty-sub">Dodaj pierwsze zadanie przyciskiem poniżej.</div></div>`;
   } else {
     const pending  = dayList.filter(t => !t.done);
@@ -1142,10 +1152,6 @@ function renderToday() {
     if (finished.length) html += '<div class="section-label">ukończone</div>' + finished.map(t => taskHTML(t,false)).join('');
     const waiting = tasks.filter(t => t.status==='waiting' && !t.done);
     if (waiting.length)  html += '<div class="section-label">czekam na</div>' + waiting.map(t => taskHTML(t,false)).join('');
-    if (future.length) {
-      const sorted = [...future].sort((a,b) => a.dueDate.localeCompare(b.dueDate));
-      html += '<div class="section-label">zaplanowane</div>' + sorted.map(t => taskHTML(t,false)).join('');
-    }
   }
   document.getElementById('today-content').innerHTML = html;
   updateHeroProgress();
