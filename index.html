@@ -785,8 +785,8 @@ function getDayList() {
   const sorted = [...pending].sort((a,b) => taskScore(b) - taskScore(a));
 
   // already assigned today (and still eligible)
-  const aIds    = new Set(tasks.filter(t => t.dayAssigned===today && !t.done && (!effectiveDueDate(t) || effectiveDueDate(t) <= today)).map(t=>t.id));
-  const dayList = tasks.filter(t => t.dayAssigned===today && !t.done && (!effectiveDueDate(t) || effectiveDueDate(t) <= today));
+  const aIds    = new Set(tasks.filter(t => t.dayAssigned===today && !t.done && t.status!=='waiting' && (!effectiveDueDate(t) || effectiveDueDate(t) <= today)).map(t=>t.id));
+  const dayList = tasks.filter(t => t.dayAssigned===today && !t.done && t.status!=='waiting' && (!effectiveDueDate(t) || effectiveDueDate(t) <= today));
 
   // auto-fill up to maxDay
   for (const t of sorted) {
