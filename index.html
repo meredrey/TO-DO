@@ -301,6 +301,15 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
         <button class="tact-btn" onclick="loadFromSheets()">Pobierz ↓</button>
       </div>
       <div class="settings-row">
+        <div><div class="settings-row-label">Eksport JSON</div><div class="settings-row-sub">pobierz kopię zadań na dysk</div></div>
+        <button class="tact-btn" onclick="exportJSON()">Pobierz ↓</button>
+      </div>
+      <div class="settings-row">
+        <div><div class="settings-row-label">Import JSON</div><div class="settings-row-sub">wgraj wcześniej zapisany plik</div></div>
+        <button class="tact-btn" onclick="document.getElementById('import-json-inp').click()">Wgraj ↑</button>
+        <input type="file" id="import-json-inp" accept=".json" style="display:none" onchange="importJSON(this)">
+      </div>
+      <div class="settings-row">
         <div><div class="settings-row-label" style="color:var(--rose)">Wyczyść dane lokalne</div></div>
         <button class="tact-btn danger" onclick="if(confirm('Usunąć wszystkie dane lokalne?')){localStorage.clear();location.reload()}">Usuń</button>
       </div>
@@ -656,36 +665,34 @@ function setSyncStatus(msg, type='') {
 }
 
 // Wyślij jedno zadanie (upsert) — fire & forget
+// fire-and-forget single task upsert
 async function syncTask(task) {
   if (!gsUrl) return;
   try {
-    await fetch(gsUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'upsert', task })
-    });
-  } catch(e) { console.warn('Sync error', e); }
+    const url = gsUrl + (gsUrl.includes('?') ? '&' : '?') + 'action=upsert&id=' + encodeURIComponent(task.id);
+    await fetch(url + '&data=' + encodeURIComponent(JSON.stringify(task)));
+  } catch(e) { /* silent */ }
 }
 
-// Wyślij wszystkie zadania + klientów do Sheets
+// Full sync via GET with data param (avoids CORS preflight)
 async function syncAll() {
   if (!gsUrl) { setSyncStatus('Brak URL — ustaw Apps Script URL w ustawieniach.', 'err'); return; }
   setSyncStatus('Wysyłam do Sheets...');
   try {
-    const r = await fetch(gsUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'syncAll', tasks, clients })
-    });
-    const d = await r.json();
+    const payload = encodeURIComponent(JSON.stringify({ tasks, clients }));
+    const url = gsUrl + (gsUrl.includes('?') ? '&' : '?') + 'action=syncAll&data=' + payload;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const d = await resp.json();
     if (d.error) throw new Error(d.error);
-    setSyncStatus('Wysłano ' + (d.tasksSynced||tasks.length) + ' zadań · ' + new Date().toLocaleTimeString('pl-PL'), 'ok');
+    setSyncStatus('Wysłano ' + (d.tasksSynced || tasks.length) + ' zadań · ' + new Date().toLocaleTimeString('pl-PL'), 'ok');
   } catch(e) {
-    setSyncStatus('Błąd wysyłania', 'err');
+    setSyncStatus('Błąd: ' + e.message, 'err');
+    console.error('syncAll error:', e);
   }
 }
 
-// Pobierz dane z Sheets i nadpisz lokalne (import)
+// Load from Sheets
 async function loadFromSheets() {
   if (!gsUrl) { setSyncStatus('Brak URL — ustaw Apps Script URL w ustawieniach.', 'err'); return; }
   setSyncStatus('Pobieram z Sheets...');
@@ -695,18 +702,10 @@ async function loadFromSheets() {
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const data = await resp.json();
     if (data.error) throw new Error(data.error);
-
-    if (Array.isArray(data.tasks) && data.tasks.length > 0) {
-      tasks = data.tasks;
-      save();
-    }
-    if (Array.isArray(data.clients) && data.clients.length > 0) {
-      clients = data.clients;
-      saveCl();
-    }
+    if (Array.isArray(data.tasks) && data.tasks.length > 0) { tasks = data.tasks; save(); }
+    if (Array.isArray(data.clients) && data.clients.length > 0) { clients = data.clients; saveCl(); }
     setSyncStatus('Pobrano ' + (data.tasks||[]).length + ' zadań · ' + new Date().toLocaleTimeString('pl-PL'), 'ok');
-    renderAll2();
-    syncTiles(); scheduleRender();
+    renderAll2(); syncTiles(); scheduleRender();
   } catch(e) {
     setSyncStatus('Błąd pobierania: ' + e.message, 'err');
   }
@@ -1138,6 +1137,37 @@ function saveTask() {
 /* ═══════════════════════════════════════════
    RENDER
 ═══════════════════════════════════════════ */
+function exportJSON() {
+  const data = { tasks, clients, exportedAt: new Date().toISOString() };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'tasks_backup_' + new Date().toISOString().split('T')[0] + '.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  setSyncStatus('Plik pobrany — ' + tasks.length + ' zadań', 'ok');
+}
+
+function importJSON(input) {
+  const file = input.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!Array.isArray(data.tasks)) throw new Error('Nieprawidłowy format pliku');
+      if (!confirm('Zastąpić aktualne dane ' + data.tasks.length + ' zadaniami z pliku?')) return;
+      tasks = data.tasks; save();
+      if (Array.isArray(data.clients)) { clients = data.clients; saveCl(); }
+      renderAll2(); syncTiles(); scheduleRender();
+      setSyncStatus('Wgrano ' + tasks.length + ' zadań z pliku', 'ok');
+    } catch(err) {
+      setSyncStatus('Błąd importu: ' + err.message, 'err');
+    }
+  };
+  reader.readAsText(file);
+  input.value = '';
+}
+
 function renderToday() {
   const { dayList, remaining } = getDayList();
   const done = dayList.filter(t => t.done).length;
