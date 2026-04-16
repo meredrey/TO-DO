@@ -665,27 +665,43 @@ function setSyncStatus(msg, type='') {
 }
 
 // Wyślij jedno zadanie (upsert) — fire & forget
-// fire-and-forget single task upsert
+// fire-and-forget single task upsert via POST no-cors
 async function syncTask(task) {
   if (!gsUrl) return;
   try {
-    const url = gsUrl + (gsUrl.includes('?') ? '&' : '?') + 'action=upsert&id=' + encodeURIComponent(task.id);
-    await fetch(url + '&data=' + encodeURIComponent(JSON.stringify(task)));
+    await fetch(gsUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'upsert', task })
+    });
   } catch(e) { /* silent */ }
 }
 
-// Full sync via GET with data param (avoids CORS preflight)
+// Full sync: POST no-cors (fire), then verify via GET
 async function syncAll() {
   if (!gsUrl) { setSyncStatus('Brak URL — ustaw Apps Script URL w ustawieniach.', 'err'); return; }
-  setSyncStatus('Wysyłam do Sheets...');
+  setSyncStatus('Wysyłam…');
   try {
-    const payload = encodeURIComponent(JSON.stringify({ tasks, clients }));
-    const url = gsUrl + (gsUrl.includes('?') ? '&' : '?') + 'action=syncAll&data=' + payload;
-    const resp = await fetch(url);
+    // POST via no-cors — gets through without preflight
+    await fetch(gsUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'syncAll', tasks, clients })
+    });
+    // wait a moment then verify via GET
+    setSyncStatus('Weryfikuję…');
+    await new Promise(r => setTimeout(r, 2500));
+    const resp = await fetch(gsUrl + '?action=getTasks');
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const d = await resp.json();
-    if (d.error) throw new Error(d.error);
-    setSyncStatus('Wysłano ' + (d.tasksSynced || tasks.length) + ' zadań · ' + new Date().toLocaleTimeString('pl-PL'), 'ok');
+    const count = Array.isArray(d) ? d.length : 0;
+    if (count === 0 && tasks.length > 0) {
+      setSyncStatus('⚠ Sheets pusty — sprawdź autoryzację skryptu', 'err');
+    } else {
+      setSyncStatus('✓ Zsynchronizowano ' + count + ' zadań · ' + new Date().toLocaleTimeString('pl-PL'), 'ok');
+    }
   } catch(e) {
     setSyncStatus('Błąd: ' + e.message, 'err');
     console.error('syncAll error:', e);
@@ -695,16 +711,15 @@ async function syncAll() {
 // Load from Sheets
 async function loadFromSheets() {
   if (!gsUrl) { setSyncStatus('Brak URL — ustaw Apps Script URL w ustawieniach.', 'err'); return; }
-  setSyncStatus('Pobieram z Sheets...');
+  setSyncStatus('Pobieram z Sheets…');
   try {
-    const url = gsUrl + (gsUrl.includes('?') ? '&' : '?') + 'action=getAll';
-    const resp = await fetch(url);
+    const resp = await fetch(gsUrl + '?action=getAll');
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const data = await resp.json();
     if (data.error) throw new Error(data.error);
     if (Array.isArray(data.tasks) && data.tasks.length > 0) { tasks = data.tasks; save(); }
     if (Array.isArray(data.clients) && data.clients.length > 0) { clients = data.clients; saveCl(); }
-    setSyncStatus('Pobrano ' + (data.tasks||[]).length + ' zadań · ' + new Date().toLocaleTimeString('pl-PL'), 'ok');
+    setSyncStatus('✓ Pobrano ' + (data.tasks||[]).length + ' zadań · ' + new Date().toLocaleTimeString('pl-PL'), 'ok');
     renderAll2(); syncTiles(); scheduleRender();
   } catch(e) {
     setSyncStatus('Błąd pobierania: ' + e.message, 'err');
