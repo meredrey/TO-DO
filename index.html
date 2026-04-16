@@ -115,6 +115,10 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
 .add-sub-row{display:flex;gap:6px;margin-top:8px}
 .add-sub-row input{flex:1;font-size:13px;padding:7px 10px;border:.5px solid var(--bd2);border-radius:8px;background:var(--bg);color:var(--text)}
 .add-sub-row input:focus{outline:none;border-color:var(--sage)}
+.sub-due{font-size:11px;color:var(--mauve);background:var(--mauve-l);border-radius:10px;padding:1px 6px;white-space:nowrap;flex-shrink:0}
+.sub-due.overdue{color:var(--rose);background:var(--rose-l)}
+.sub-date-inp{font-size:12px;padding:4px 7px;border:.5px solid var(--bd2);border-radius:7px;background:var(--bg);color:var(--text);width:130px;flex-shrink:0}
+.sub-date-inp:focus{outline:none;border-color:var(--sage)}
 .add-sub-btn{padding:7px 12px;background:var(--sage);color:white;border:none;border-radius:8px;font-size:12px;font-weight:500;cursor:pointer}
 
 /* note */
@@ -326,29 +330,33 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
         <label class="form-label">Klient / obszar</label>
         <select class="form-input" id="f-client"></select>
       </div>
+      <div class="form-group">
+        <label class="form-label">Due date</label>
+        <input type="date" class="form-input" id="f-due">
+      </div>
       <div style="display:flex;justify-content:flex-end;margin-bottom:13px">
         <span class="ql" onclick="toggleDetails()" id="dtoggle">+ więcej opcji</span>
       </div>
 
       <div id="detail-mode" style="display:none">
-        <div class="form-row" style="margin-bottom:13px">
-          <div><label class="form-label">Est. czas (min)</label><input type="number" class="form-input" id="f-time" placeholder="30" min="1"></div>
-          <div><label class="form-label">Due date</label><input type="date" class="form-input" id="f-due"></div>
+        <div class="form-group">
+          <label class="form-label">Est. czas (min)</label>
+          <input type="number" class="form-input" id="f-time" placeholder="30" min="1">
         </div>
         <div class="form-group">
           <label class="form-label">Pilność</label>
           <div class="toggle-row" id="u-row">
-            <button class="toggle-btn" onclick="setU(1)">niska</button>
+            <button class="toggle-btn sel-u" onclick="setU(1)">niska</button>
             <button class="toggle-btn" onclick="setU(2)">średnia</button>
-            <button class="toggle-btn sel-u" onclick="setU(3)">wysoka</button>
+            <button class="toggle-btn" onclick="setU(3)">wysoka</button>
           </div>
         </div>
         <div class="form-group">
           <label class="form-label">Ważność</label>
           <div class="toggle-row" id="i-row">
-            <button class="toggle-btn" onclick="setI(1)">niska</button>
+            <button class="toggle-btn sel-i" onclick="setI(1)">niska</button>
             <button class="toggle-btn" onclick="setI(2)">średnia</button>
-            <button class="toggle-btn sel-i" onclick="setI(3)">wysoka</button>
+            <button class="toggle-btn" onclick="setI(3)">wysoka</button>
           </div>
         </div>
         <div class="form-group">
@@ -790,9 +798,12 @@ function taskHTML(t, showAdd) {
   const sp        = subProg(t);
   const hasNote   = t.note && t.note.trim().length > 0;
   const hasLinks  = t.links && t.links.length > 0;
+  // only show energy chip if explicitly set to high
   const energyChip = t.energy === 'high'
     ? '<span class="chip chip-energy-high">↑ energochłonne</span>'
-    : '<span class="chip chip-energy-low">↓ lekkie</span>';
+    : '';
+  // only show quadrant chip if task has any non-default priority set
+  const hasNonDefaultPriority = (t.urgency && t.urgency >= 2) || (t.importance && t.importance >= 2);
   const subProgHTML = sp
     ? `<div class="sub-prog"><div class="sub-prog-track"><div class="sub-prog-fill" style="width:${Math.round(sp.d/sp.total*100)}%"></div></div><span class="sub-prog-txt">${sp.d}/${sp.total}</span></div>`
     : '';
@@ -808,9 +819,10 @@ function taskHTML(t, showAdd) {
         <span class="chip chip-client" style="background:${cc}18;color:${cc};border:.5px solid ${cc}40">${t.client||'–'}</span>
         ${isQuick ? '<span class="chip chip-quick">&lt;10min</span>' : ''}
         ${t.estTime && !isQuick ? `<span class="chip chip-time">${fmtTime(t.estTime)}</span>` : ''}
-        <span class="chip ${qc}">${ql}</span>
+        ${hasNonDefaultPriority ? `<span class="chip ${qc}">${ql}</span>` : ''}
         ${t.dueDate ? `<span class="chip ${isOverdue?'chip-overdue':'chip-due'}">${isOverdue?'! ':''}${t.dueDate}</span>` : ''}
         ${t.status==='waiting' ? `<span class="chip chip-waiting">czekam: ${t.waitingFor||'?'}</span>` : ''}
+        ${energyChip}
         ${hasNote  ? '<span class="chip chip-has-note">notatka</span>' : ''}
         ${hasLinks ? `<span class="chip chip-has-links">${t.links.length} link${t.links.length>1?'i':''}</span>` : ''}
       </div>
@@ -836,14 +848,27 @@ function taskHTML(t, showAdd) {
     <div class="dtab-content active" id="dt-subs-${t.id}">
       <div id="subs-list-${t.id}">
         ${t.subtasks && t.subtasks.length
-          ? t.subtasks.map((s,si) => `
+          ? t.subtasks.map((s,si) => {
+              const sOverdue = s.dueDate && s.dueDate < new Date().toISOString().split('T')[0];
+              const sDueToday = s.dueDate === new Date().toISOString().split('T')[0];
+              const dueBadge = s.dueDate
+                ? `<span class="sub-due${sOverdue?' overdue':''}">${sOverdue?'! ':''}${s.dueDate}</span>`
+                : '';
+              return `
             <div class="subtask-item">
               <div class="sub-check${s.done?' done':''}" onclick="toggleSub('${t.id}',${si})">
                 <svg viewBox="0 0 10 10" fill="none" stroke="white" stroke-width="2"><polyline points="1.5,5 4,7.5 8.5,2.5"/></svg>
               </div>
-              <span class="subtask-name${s.done?' done':''}">${s.name}</span>
+              <span class="subtask-name${s.done?' done':''}" style="flex:1">${s.name}</span>
+              ${dueBadge}
+              <input type="date" class="sub-date-inp" value="${s.dueDate||''}"
+                onchange="setSubDate('${t.id}',${si},this.value)"
+                title="Termin podzadania" style="width:36px;padding:2px 4px;opacity:.4;cursor:pointer"
+                onfocus="this.style.width='130px';this.style.opacity='1'"
+                onblur="this.style.width='36px';this.style.opacity=this.value?'1':'.4'">
               <button class="sub-del" onclick="deleteSub('${t.id}',${si})">×</button>
-            </div>`).join('')
+            </div>`;
+            }).join('')
           : '<div style="font-size:13px;color:var(--text3);padding:4px 0 8px">Brak podzadań.</div>'
         }
       </div>
@@ -855,7 +880,6 @@ function taskHTML(t, showAdd) {
 
     <div class="dtab-content" id="dt-note-${t.id}">
       ${t.status==='waiting' && t.waitingFor ? `<div class="waiting-note">Czekam na: ${t.waitingFor}</div>` : ''}
-      ${energyChip}
       <textarea class="note-area" id="note-${t.id}" placeholder="Notatki, kontekst, szczegóły…" style="margin-top:8px">${t.note||''}</textarea>
       <div style="display:flex;align-items:center;gap:10px;margin-top:7px">
         <button class="note-save-btn" onclick="saveNote('${t.id}')">Zapisz</button>
@@ -904,7 +928,7 @@ function switchDtab(tid, tab, btn) {
 
 function toggleExpand(id, e) {
   // let clicks on interactive elements pass through — do NOT swallow them
-  if (e.target.closest('.check-circle,.add-sub-row,.sub-check,.sub-del,.add-sub-btn,.note-area,.note-save-btn,.dtab,.show-link-form-btn,.add-link-form,.link-open,.link-del,.btn-add-link,.btn-cancel-lf,.tact-btn,.task-expand-btn')) return;
+  if (e.target.closest('.check-circle,.add-sub-row,.sub-check,.sub-del,.add-sub-btn,.sub-date-inp,.note-area,.note-save-btn,.dtab,.show-link-form-btn,.add-link-form,.link-open,.link-del,.btn-add-link,.btn-cancel-lf,.tact-btn,.task-expand-btn,.edit-inline-btn')) return;
   const det = document.getElementById('det-'+id);
   const btn = document.getElementById('exp-'+id);
   const open = !det.classList.contains('open');
@@ -941,9 +965,16 @@ function addSubtask(tid) {
   const t = tasks.find(t => t.id === tid);
   if (t) {
     if (!t.subtasks) t.subtasks = [];
-    t.subtasks.push({ name:val, done:false });
+    t.subtasks.push({ name:val, done:false, dueDate:null });
     save(); renderAll2();
     setTimeout(() => { document.getElementById('sub-inp-'+tid)?.focus(); }, 50);
+  }
+}
+function setSubDate(tid, si, val) {
+  const t = tasks.find(t => t.id === tid);
+  if (t && t.subtasks && t.subtasks[si] !== undefined) {
+    t.subtasks[si].dueDate = val || null;
+    save(); renderAll2();
   }
 }
 function saveNote(tid) {
@@ -1025,7 +1056,7 @@ function toggleDetails() {
 
 /* modal open / close */
 function openModal(id=null) {
-  editId = id; fU=3; fI=3; fE='low'; fStatus='todo'; detailsOpen=false;
+  editId = id; fU=1; fI=1; fE='low'; fStatus='todo'; detailsOpen=false;
   document.getElementById('detail-mode').style.display = 'none';
   document.getElementById('dtoggle').textContent = '+ więcej opcji';
   document.getElementById('waiting-who-wrap').style.display = 'none';
