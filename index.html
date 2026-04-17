@@ -183,6 +183,13 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
 .toggle-btn.sel-i{background:var(--sage-l);border-color:var(--sage);color:var(--sage-d)}
 .toggle-btn.sel-e{background:var(--teal-l);border-color:var(--teal);color:var(--teal)}
 .ql{font-size:12px;color:var(--sage);cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.quick-date-row{display:flex;gap:5px;margin-bottom:4px}
+.qd-btn{flex:1;padding:6px 4px;border:.5px solid var(--bd2);border-radius:8px;background:var(--bg2);font-size:12px;font-weight:500;cursor:pointer;color:var(--text2);transition:all .15s;text-align:center}
+.qd-btn.active{background:var(--sage-l);border-color:var(--sage);color:var(--sage-d)}
+.recur-row{display:flex;gap:5px;flex-wrap:wrap}
+.recur-btn{padding:5px 10px;border:.5px solid var(--bd);border-radius:8px;background:var(--bg2);font-size:12px;font-weight:500;cursor:pointer;color:var(--text2);transition:all .15s}
+.recur-btn.active{background:var(--lavender-l);border-color:var(--lavender);color:var(--lavender)}
+.chip-recur{background:var(--lavender-l);color:var(--lavender)}
 .btn-primary{width:100%;padding:13px;background:var(--sage);color:white;border:none;border-radius:11px;font-size:15px;font-weight:600;cursor:pointer;margin-top:4px;transition:opacity .15s}
 .btn-primary:hover{opacity:.9}
 .btn-cancel-main{width:100%;padding:10px;background:none;border:none;color:var(--text3);font-size:14px;cursor:pointer;margin-top:2px}
@@ -360,7 +367,13 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
       </div>
       <div class="form-group">
         <label class="form-label">Due date</label>
-        <input type="date" class="form-input" id="f-due">
+        <div class="quick-date-row">
+          <button class="qd-btn" id="qd-today" onclick="setQuickDate('today')">Dziś</button>
+          <button class="qd-btn" id="qd-tomorrow" onclick="setQuickDate('tomorrow')">Jutro</button>
+          <button class="qd-btn" id="qd-week" onclick="setQuickDate('week')">Za tydzień</button>
+          <button class="qd-btn" id="qd-none" onclick="setQuickDate('none')">Brak</button>
+        </div>
+        <input type="date" class="form-input" id="f-due" oninput="syncQuickDates()" style="margin-top:5px">
       </div>
       <div style="display:flex;justify-content:flex-end;margin-bottom:13px">
         <span class="ql" onclick="toggleDetails()" id="dtoggle">+ więcej opcji</span>
@@ -406,6 +419,16 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
           <input type="text" class="form-input" id="f-waiting" placeholder="np. odpowiedź od Nouhy">
         </div>
         <div class="form-group">
+          <label class="form-label">Powtarzanie</label>
+          <div class="recur-row" id="recur-row">
+            <button class="recur-btn active" onclick="setRecur('none',this)">Brak</button>
+            <button class="recur-btn" onclick="setRecur('daily',this)">Codziennie</button>
+            <button class="recur-btn" onclick="setRecur('weekdays',this)">Dni robocze</button>
+            <button class="recur-btn" onclick="setRecur('weekly',this)">Co tydzień</button>
+            <button class="recur-btn" onclick="setRecur('monthly',this)">Co miesiąc</button>
+          </div>
+        </div>
+        <div class="form-group">
           <label class="form-label">Notatka</label>
           <textarea class="note-area" id="f-note" placeholder="Kontekst, szczegóły, myśli…" rows="3"></textarea>
         </div>
@@ -437,7 +460,7 @@ let gsUrl        = localStorage.getItem(GK) || '';
 let maxDay       = parseInt(localStorage.getItem(MK) || '5');
 
 let editId = null, detailsOpen = false;
-let fU = 3, fI = 3, fE = 'low', fStatus = 'todo';
+let fU = 1, fI = 1, fE = 'low', fStatus = 'todo', fRecur = 'none';
 let allFilter = 'all';
 
 const CL_COLORS = ['#6b9478','#8a6b7e','#5e8e90','#9e7e4a','#7a6e9e','#7a8a6b','#6b7a8e','#8e6b6b'];
@@ -898,6 +921,7 @@ function taskHTML(t, showAdd) {
         ${eff ? `<span class="chip ${isOverdue?'chip-overdue':'chip-due'}">${isOverdue?'! ':''}${eff}${!t.dueDate?' *':''}</span>` : ''}
         ${t.status==='waiting' ? `<span class="chip chip-waiting">czekam: ${t.waitingFor||'?'}</span>` : ''}
         ${energyChip}
+        ${t.recur&&t.recur!=='none'?`<span class="chip chip-recur">${{daily:'codziennie',weekdays:'dni robocze',weekly:'co tydzień',monthly:'co miesiąc'}[t.recur]||''}</span>`:''}
         ${hasNote  ? '<span class="chip chip-has-note">notatka</span>' : ''}
         ${hasLinks ? `<span class="chip chip-has-links">${t.links.length} link${t.links.length>1?'i':''}</span>` : ''}
       </div>
@@ -1055,19 +1079,54 @@ function toggleExpand(id, e) {
   btn?.classList.toggle('open', open);
 }
 
+function nextRecurDate(t) {
+  const base = t.dueDate || td();
+  const d = new Date(base + 'T00:00:00');
+  if (t.recur === 'daily')         { d.setDate(d.getDate()+1); }
+  else if (t.recur === 'weekdays') { d.setDate(d.getDate()+1); while(d.getDay()===0||d.getDay()===6) d.setDate(d.getDate()+1); }
+  else if (t.recur === 'weekly')   { d.setDate(d.getDate()+7); }
+  else if (t.recur === 'monthly')  { d.setMonth(d.getMonth()+1); }
+  return d.toISOString().split('T')[0];
+}
+
 function toggleDone(id, e) {
   e.stopPropagation();
   const t = tasks.find(t => t.id === id);
   if (!t) return;
   const wasDone = t.done;
   t.done = !t.done;
+
+  if (!wasDone && t.recur && t.recur !== 'none') {
+    const next = Object.assign({}, t, {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2,5),
+      done: false,
+      dueDate: nextRecurDate(t),
+      dayAssigned: null,
+      subtasks: (t.subtasks||[]).map(s => Object.assign({},s,{done:false})),
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    });
+    tasks.push(next);
+    syncTiles();
+  }
+
   save();
   if (!wasDone) {
     const idx = tasks.indexOf(t);
     if (idx >= 0 && idx < COLS*ROWS) explodeTile(idx);
   }
-  renderAll2();
-  scheduleAutoSync();
+  renderAll2(); scheduleAutoSync();
+}
+
+function updateTaskDateFromSubs(t) {
+  // if task has no own dueDate, derive from earliest pending subtask date
+  if (t.dueDate) return; // task has explicit date, don't override
+  const pendingDates = (t.subtasks||[])
+    .filter(s => !s.done && s.dueDate)
+    .map(s => s.dueDate)
+    .sort();
+  // nothing to update — effectiveDueDate handles display
+  // but we don't mutate t.dueDate since it's computed dynamically
 }
 
 function toggleSub(tid, si) {
@@ -1075,7 +1134,8 @@ function toggleSub(tid, si) {
   if (!t || !t.subtasks) return;
   t.subtasks[si].done = !t.subtasks[si].done;
   save(); scheduleAutoSync();
-  // surgical update
+
+  // surgical DOM update
   const row = document.getElementById('sub-row-'+tid+'-'+si);
   if (row) {
     const check = row.querySelector('.sub-check');
@@ -1084,6 +1144,25 @@ function toggleSub(tid, si) {
     else { check?.classList.remove('done'); name?.classList.remove('done'); }
   }
   updateSubProgress(tid, t);
+
+  // update due date chip on task card — effectiveDueDate may have changed
+  const eff = effectiveDueDate(t);
+  const today = td();
+  const isOverdue = eff && eff < today;
+  const card = document.getElementById('tc-'+tid);
+  if (card) {
+    let dueChip = card.querySelector('.chip-due, .chip-overdue');
+    if (eff) {
+      if (!dueChip) {
+        dueChip = document.createElement('span');
+        card.querySelector('.task-chips')?.appendChild(dueChip);
+      }
+      dueChip.className = 'chip ' + (isOverdue ? 'chip-overdue' : 'chip-due');
+      dueChip.textContent = (isOverdue ? '! ' : '') + eff + (!t.dueDate ? ' *' : '');
+    } else if (dueChip) {
+      dueChip.remove();
+    }
+  }
 }
 function deleteSub(tid, si) {
   const t = tasks.find(t => t.id === tid);
@@ -1292,6 +1371,30 @@ function weeklyReview() {
 function setAllFilter(f) { allFilter = f; renderAll(); }
 
 /* form toggles */
+function setQuickDate(which) {
+  const inp = document.getElementById('f-due');
+  const d = new Date();
+  if (which==='today')    { inp.value = d.toISOString().split('T')[0]; }
+  else if (which==='tomorrow') { d.setDate(d.getDate()+1); inp.value = d.toISOString().split('T')[0]; }
+  else if (which==='week') { d.setDate(d.getDate()+7); inp.value = d.toISOString().split('T')[0]; }
+  else { inp.value = ''; }
+  syncQuickDates();
+}
+function syncQuickDates() {
+  const val = document.getElementById('f-due').value;
+  const today = new Date().toISOString().split('T')[0];
+  const tomorrow = new Date(Date.now()+86400000).toISOString().split('T')[0];
+  const week = new Date(Date.now()+7*86400000).toISOString().split('T')[0];
+  document.getElementById('qd-today').classList.toggle('active', val===today);
+  document.getElementById('qd-tomorrow').classList.toggle('active', val===tomorrow);
+  document.getElementById('qd-week').classList.toggle('active', val===week);
+  document.getElementById('qd-none').classList.toggle('active', !val);
+}
+function setRecur(val, btn) {
+  fRecur = val;
+  document.querySelectorAll('#recur-row .recur-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
 function setU(v) { fU=v; document.querySelectorAll('#u-row .toggle-btn').forEach((b,i) => b.className='toggle-btn'+(i+1===v?' sel-u':'')); }
 function setI(v) { fI=v; document.querySelectorAll('#i-row .toggle-btn').forEach((b,i) => b.className='toggle-btn'+(i+1===v?' sel-i':'')); }
 function setE(v) { fE=v; document.querySelectorAll('#e-row .toggle-btn').forEach(b => { const isL = b.textContent.trim()==='niska'; b.className='toggle-btn'+((v==='low'&&isL||v==='high'&&!isL)?' sel-e':''); }); }
@@ -1309,7 +1412,7 @@ function toggleDetails() {
 
 /* modal open / close */
 function openModal(id=null) {
-  editId = id; fU=1; fI=1; fE='low'; fStatus='todo'; detailsOpen=false;
+  editId = id; fU=1; fI=1; fE='low'; fStatus='todo'; fRecur='none'; detailsOpen=false;
   document.getElementById('detail-mode').style.display = 'none';
   document.getElementById('dtoggle').textContent = '+ więcej opcji';
   document.getElementById('waiting-who-wrap').style.display = 'none';
@@ -1328,7 +1431,7 @@ function openModal(id=null) {
       document.getElementById('f-waiting').value = t.waitingFor || '';
       document.getElementById('f-note').value    = t.note || '';
       sel.value = t.client || clients[0];
-      fU=t.urgency||3; fI=t.importance||3; fE=t.energy||'low'; fStatus=t.status||'todo';
+      fU=t.urgency||3; fI=t.importance||3; fE=t.energy||'low'; fStatus=t.status||'todo'; fRecur=t.recur||'none';
       detailsOpen=true;
       document.getElementById('detail-mode').style.display = 'block';
       document.getElementById('dtoggle').textContent = '− mniej opcji';
@@ -1339,7 +1442,12 @@ function openModal(id=null) {
     }
   }
   document.getElementById('overlay').classList.add('open');
-  setTimeout(() => document.getElementById('f-name').focus(), 120);
+  setTimeout(() => {
+    document.getElementById('f-name').focus();
+    syncQuickDates();
+    // sync recur buttons
+    document.querySelectorAll('#recur-row .recur-btn').forEach(b => b.classList.toggle('active', b.getAttribute('onclick')?.includes("'"+fRecur+"'")));
+  }, 120);
 }
 function editTask(id) { openModal(id); }
 function closeModal() { document.getElementById('overlay').classList.remove('open'); editId=null; }
@@ -1357,17 +1465,16 @@ function saveTask() {
   if (editId) {
     const t = tasks.find(t => t.id === editId);
     if (t) {
-      // if effective date is future, remove from today's list
       const newEdd = dueDate || (t.subtasks||[]).map(s=>s.dueDate).filter(Boolean).sort()[0] || null;
       if (newEdd && newEdd > td() && t.dayAssigned === td()) t.dayAssigned = null;
-      Object.assign(t, {name,client,estTime,dueDate,urgency:fU,importance:fI,energy:fE,status:fStatus,waitingFor,note,updatedAt:Date.now()});
+      Object.assign(t, {name,client,estTime,dueDate,urgency:fU,importance:fI,energy:fE,status:fStatus,waitingFor,note,recur:fRecur,updatedAt:Date.now()});
       syncTask(t);
     }
   } else {
     const newTask = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2,5),
       name, client, estTime, dueDate, urgency:fU, importance:fI, energy:fE,
-      status:fStatus, waitingFor, note, done:false, subtasks:[], links:[],
+      status:fStatus, waitingFor, note, recur:fRecur, done:false, subtasks:[], links:[],
       createdAt: Date.now(), dayAssigned: null
     };
     tasks.push(newTask);
@@ -1612,7 +1719,41 @@ function moveToToday(id) {
   save(); renderAll2(); scheduleAutoSync();
 }
 
-function renderAll2() { renderToday(); renderAll(); renderPlans(); renderClients(); renderSettings(); }
+function getOpenDetails() {
+  const open = [];
+  document.querySelectorAll('.task-detail.open').forEach(el => {
+    // id is "det-TASKID"
+    const tid = el.id.replace('det-','');
+    // also capture which dtab is active
+    const activeTab = el.querySelector('.dtab.active')?.getAttribute('onclick')?.match(/'(\w+)'/)?.[1] || 'subs';
+    open.push({tid, activeTab});
+  });
+  return open;
+}
+
+function restoreOpenDetails(openList) {
+  openList.forEach(({tid, activeTab}) => {
+    const det = document.getElementById('det-'+tid);
+    const btn = document.getElementById('exp-'+tid);
+    if (det) {
+      det.classList.add('open');
+      if (btn) btn.classList.add('open');
+      // restore active tab
+      ['subs','more'].forEach(t => {
+        document.getElementById('dt-'+t+'-'+tid)?.classList.toggle('active', t===activeTab);
+      });
+      det.querySelectorAll('.dtab').forEach(b => {
+        b.classList.toggle('active', b.getAttribute('onclick')?.includes("'"+activeTab+"'"));
+      });
+    }
+  });
+}
+
+function renderAll2() {
+  const open = getOpenDetails();
+  renderToday(); renderAll(); renderPlans(); renderClients(); renderSettings();
+  if (open.length) restoreOpenDetails(open);
+}
 
 function switchTab(tab, el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
