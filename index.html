@@ -56,7 +56,8 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
 
 /* ── TASK CARD ── */
 .task-card-wrap{position:relative;margin-bottom:8px;border-radius:14px;overflow:hidden}
-.task-card-actions{position:absolute;right:0;top:0;bottom:0;display:flex;align-items:stretch}
+.task-card-actions{position:absolute;right:0;top:0;bottom:0;display:flex;align-items:stretch;opacity:0;pointer-events:none;transition:opacity .2s}
+.task-card-wrap.reveal .task-card-actions{opacity:1;pointer-events:auto}
 .task-card-swipe-done{background:var(--sage);color:white;border:none;cursor:pointer;padding:0 16px;font-size:12px;font-weight:500}
 .task-card-swipe-del{background:var(--rose);color:white;border:none;cursor:pointer;padding:0 14px;font-size:16px}
 .task-card{background:var(--bg);border:.5px solid var(--bd);border-radius:14px;overflow:hidden;transition:transform .2s ease,border-color .15s;position:relative;z-index:1}
@@ -802,7 +803,10 @@ function qScore(t) {
 function effectiveDueDate(t) {
   if (t.dueDate) return t.dueDate;
   if (t.subtasks && t.subtasks.length) {
-    const dates = t.subtasks.map(s => s.dueDate).filter(Boolean).sort();
+    const dates = t.subtasks
+      .filter(s => !s.done && s.dueDate)
+      .map(s => s.dueDate)
+      .sort();
     if (dates.length) return dates[0];
   }
   return null;
@@ -1033,17 +1037,22 @@ function swipeEnd(e, tid) {
   swipeActive = null;
   const dx = swipeStartX - (e.changedTouches[0]?.clientX || swipeStartX);
   const card = document.getElementById('tc-'+tid);
+  const wrap = document.getElementById('tcw-'+tid);
   if (!card) return;
   if (dx > 60) {
     card.classList.add('swiped');
+    wrap?.classList.add('reveal');
   } else {
     card.style.transform = '';
     card.classList.remove('swiped');
+    wrap?.classList.remove('reveal');
   }
 }
 function swipeDone(tid) {
   const card = document.getElementById('tc-'+tid);
+  const wrap = document.getElementById('tcw-'+tid);
   if (card) { card.style.transform=''; card.classList.remove('swiped'); }
+  wrap?.classList.remove('reveal');
   const t = tasks.find(t=>t.id===tid);
   if (!t) return;
   const wasDone = t.done;
@@ -1053,7 +1062,9 @@ function swipeDone(tid) {
 }
 function swipeDel(tid) {
   const card = document.getElementById('tc-'+tid);
+  const wrap = document.getElementById('tcw-'+tid);
   if (card) { card.style.transform=''; card.classList.remove('swiped'); }
+  wrap?.classList.remove('reveal');
   if (!confirm('Usunąć zadanie?')) return;
   tasks = tasks.filter(t=>t.id!==tid);
   save(); syncTiles(); scheduleRender(); renderAll2(); scheduleAutoSync();
