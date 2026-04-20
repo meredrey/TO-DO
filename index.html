@@ -191,6 +191,33 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
 .recur-btn{padding:5px 10px;border:.5px solid var(--bd);border-radius:8px;background:var(--bg2);font-size:12px;font-weight:500;cursor:pointer;color:var(--text2);transition:all .15s}
 .recur-btn.active{background:var(--lavender-l);border-color:var(--lavender);color:var(--lavender)}
 .chip-recur{background:var(--lavender-l);color:var(--lavender)}
+.meeting-card{background:var(--bg);border:.5px solid var(--bd);border-radius:14px;margin-bottom:10px;overflow:hidden}
+.meeting-header{padding:13px 14px;cursor:pointer;display:flex;gap:10px;align-items:flex-start}
+.meeting-header:hover{background:var(--bg2)}
+.meeting-dot{width:10px;height:10px;border-radius:50%;background:var(--mauve);flex-shrink:0;margin-top:4px}
+.meeting-title{font-size:15px;font-weight:500;color:var(--text);flex:1;line-height:1.3}
+.meeting-meta{font-size:12px;color:var(--text2);margin-top:2px}
+.meeting-body{display:none;border-top:.5px solid var(--bd);padding:12px 14px;background:var(--bg2)}
+.meeting-body.open{display:block}
+.agenda-item{display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:.5px solid var(--bd);font-size:13px;color:var(--text)}
+.agenda-item:last-child{border-bottom:none}
+.agenda-check{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--bd2);flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;margin-top:1px}
+.agenda-check.done{background:var(--mauve);border-color:var(--mauve)}
+.agenda-check.done svg{opacity:1!important}
+.agenda-check svg{width:8px;height:8px;opacity:0}
+.agenda-text{flex:1;line-height:1.4}
+.agenda-text.done{text-decoration:line-through;color:var(--text3)}
+.agenda-del{background:none;border:none;cursor:pointer;color:var(--text3);font-size:13px;padding:0 2px}
+.add-agenda-row{display:flex;gap:6px;margin-top:8px}
+.add-agenda-row input{flex:1;font-size:13px;padding:7px 10px;border:.5px solid var(--bd2);border-radius:8px;background:var(--bg);color:var(--text)}
+.add-agenda-row input:focus{outline:none;border-color:var(--mauve)}
+.add-agenda-btn{padding:7px 12px;background:var(--mauve);color:white;border:none;border-radius:8px;font-size:12px;font-weight:500;cursor:pointer}
+.meeting-actions{display:flex;gap:6px;margin-top:10px}
+.plans-subtabs{display:flex;gap:4px;margin-bottom:14px;background:var(--bg2);border-radius:10px;padding:3px}
+.plans-subtab{flex:1;padding:7px 0;border:none;background:transparent;border-radius:7px;font-size:13px;font-weight:500;color:var(--text2);cursor:pointer;transition:all .18s;text-align:center}
+.plans-subtab.active{background:var(--bg);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.07)}
+.add-meeting-form{background:var(--bg);border:.5px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:14px}
+.meeting-past{opacity:.55}
 .btn-primary{width:100%;padding:13px;background:var(--sage);color:white;border:none;border-radius:11px;font-size:15px;font-weight:600;cursor:pointer;margin-top:4px;transition:opacity .15s}
 .btn-primary:hover{opacity:.9}
 .btn-cancel-main{width:100%;padding:10px;background:none;border:none;color:var(--text3);font-size:14px;cursor:pointer;margin-top:2px}
@@ -286,7 +313,16 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
     <div id="all-content"></div>
   </div>
 
-  <div id="tab-plans" class="tab"><div id="plans-content"></div></div>
+  <div id="tab-plans" class="tab">
+    <div style="padding:14px 16px 0">
+      <div class="plans-subtabs">
+        <button class="plans-subtab active" onclick="switchPlansSub('tasks',this)">Zaplanowane</button>
+        <button class="plans-subtab" onclick="switchPlansSub('meetings',this)">Spotkania</button>
+      </div>
+    </div>
+    <div id="plans-tasks-panel" style="padding:0 16px"><div id="plans-content"></div></div>
+    <div id="plans-meetings-panel" style="padding:0 16px;display:none"><div id="meetings-content"></div></div>
+  </div>
 
   <div id="tab-settings" class="tab">
     <div class="settings-section">
@@ -448,6 +484,7 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
 const SK  = 'mata_tasks_v4';
 const CK  = 'mata_clients_v2';
 const CNK = 'mata_client_notes_v1';
+const MeK = 'mata_meetings_v1';
 const GK  = 'mata_gs_url';
 const MK  = 'mata_max_day';
 
@@ -457,6 +494,7 @@ const MK  = 'mata_max_day';
 let tasks        = JSON.parse(localStorage.getItem(SK)  || '[]');
 let clients      = JSON.parse(localStorage.getItem(CK)  || '["Sandoz","AZ","UCB","Recipharm","Prywatne"]');
 let clientNotes  = JSON.parse(localStorage.getItem(CNK) || '{}');
+let meetings     = JSON.parse(localStorage.getItem(MeK) || '[]');
 let gsUrl        = localStorage.getItem(GK) || '';
 let maxDay       = parseInt(localStorage.getItem(MK) || '5');
 
@@ -469,6 +507,7 @@ const CL_COLORS = ['#6b9478','#8a6b7e','#5e8e90','#9e7e4a','#7a6e9e','#7a8a6b','
 const save    = () => localStorage.setItem(SK,  JSON.stringify(tasks));
 const saveCl  = () => localStorage.setItem(CK,  JSON.stringify(clients));
 const saveCN  = () => localStorage.setItem(CNK, JSON.stringify(clientNotes));
+const saveMe  = () => localStorage.setItem(MeK, JSON.stringify(meetings));
 const td      = () => new Date().toISOString().split('T')[0];
 
 /* ═══════════════════════════════════════════
@@ -1747,6 +1786,206 @@ function moveToToday(id) {
   save(); renderAll2(); scheduleAutoSync();
 }
 
+/* ═══════════════════════════════════════════
+   MEETINGS
+═══════════════════════════════════════════ */
+let activePlansSub = 'tasks';
+
+function switchPlansSub(sub, btn) {
+  activePlansSub = sub;
+  document.getElementById('plans-tasks-panel').style.display = sub==='tasks' ? 'block' : 'none';
+  document.getElementById('plans-meetings-panel').style.display = sub==='meetings' ? 'block' : 'none';
+  btn.closest('.plans-subtabs').querySelectorAll('.plans-subtab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (sub==='meetings') renderMeetings();
+}
+
+function renderMeetings() {
+  const today = td();
+  const upcoming = meetings.filter(m => m.date >= today).sort((a,b) => a.date.localeCompare(b.date));
+  const past     = meetings.filter(m => m.date < today).sort((a,b) => b.date.localeCompare(a.date));
+
+  let html = meetingFormHTML() ;
+  if (!upcoming.length && !past.length) {
+    html += `<div class="empty"><div class="empty-icon">◈</div><div class="empty-title">Brak spotkań</div><div class="empty-sub">Dodaj pierwsze spotkanie powyżej.</div></div>`;
+  } else {
+    if (upcoming.length) {
+      html += '<div class="section-label">nadchodzące</div>';
+      html += upcoming.map((m,i) => meetingCardHTML(m, meetings.indexOf(m))).join('');
+    }
+    if (past.length) {
+      html += '<div class="section-label" style="margin-top:16px">przeszłe</div>';
+      html += past.slice(0,5).map(m => meetingCardHTML(m, meetings.indexOf(m), true)).join('');
+    }
+  }
+  document.getElementById('meetings-content').innerHTML = html;
+}
+
+function meetingFormHTML() {
+  return `<div class="add-meeting-form">
+    <div class="form-group" style="margin-bottom:10px">
+      <label class="form-label">Nazwa spotkania</label>
+      <input type="text" class="form-input" id="new-meeting-title" placeholder="np. Sandoz weekly, 1:1 z Nouhą…">
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <div style="flex:1">
+        <label class="form-label">Data</label>
+        <input type="date" class="form-input" id="new-meeting-date">
+      </div>
+      <div style="flex:1">
+        <label class="form-label">Klient</label>
+        <select class="form-input" id="new-meeting-client">
+          ${clients.map(c => `<option value="${c}">${c}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <button class="add-row-btn" style="width:100%;background:var(--mauve)" onclick="addMeeting()">+ Dodaj spotkanie</button>
+  </div>`;
+}
+
+function meetingCardHTML(m, idx, isPast=false) {
+  const d = new Date(m.date+'T00:00:00');
+  const dateLabel = d.toLocaleDateString('pl-PL',{weekday:'long',day:'numeric',month:'long'});
+  const done  = (m.agenda||[]).filter(a=>a.done).length;
+  const total = (m.agenda||[]).length;
+  const agendaHTML = (m.agenda||[]).map((a,ai) => `
+    <div class="agenda-item" id="agenda-${idx}-${ai}">
+      <div class="agenda-check${a.done?' done':''}" onclick="toggleAgenda(${idx},${ai})">
+        <svg viewBox="0 0 10 10" fill="none" stroke="white" stroke-width="2"><polyline points="1.5,5 4,7.5 8.5,2.5"/></svg>
+      </div>
+      <span class="agenda-text${a.done?' done':''}">${a.text}</span>
+      <button class="agenda-del" onclick="deleteAgenda(${idx},${ai})">×</button>
+    </div>`).join('');
+
+  return `<div class="meeting-card${isPast?' meeting-past':''}" id="meeting-card-${idx}">
+    <div class="meeting-header" onclick="toggleMeetingCard(${idx})">
+      <div class="meeting-dot" style="background:${isPast?'var(--text3)':'var(--mauve)'}"></div>
+      <div style="flex:1">
+        <div class="meeting-title">${m.title}</div>
+        <div class="meeting-meta">${dateLabel}${m.client?' · '+m.client:''}${total?' · '+done+'/'+total+' punktów':''}</div>
+      </div>
+      <button class="tact-btn danger" style="font-size:11px;padding:3px 8px" onclick="event.stopPropagation();deleteMeeting(${idx})">Usuń</button>
+    </div>
+    <div class="meeting-body" id="meeting-body-${idx}">
+      ${total?`<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Agenda · to discuss</div>`:''}
+      <div id="agenda-list-${idx}">${agendaHTML}</div>
+      ${!total?'<div style="font-size:13px;color:var(--text3);margin-bottom:8px">Brak punktów agendy.</div>':''}
+      <div class="add-agenda-row">
+        <input type="text" placeholder="Dodaj punkt agendy…" id="agenda-inp-${idx}"
+          onkeydown="if(event.key==='Enter')addAgenda(${idx})">
+        <button class="add-agenda-btn" onclick="addAgenda(${idx})">+ Dodaj</button>
+      </div>
+      <div class="meeting-actions">
+        <button class="tact-btn" onclick="copyAgenda(${idx})">Kopiuj agendę</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function toggleMeetingCard(idx) {
+  const body = document.getElementById('meeting-body-'+idx);
+  if (!body) return;
+  body.classList.toggle('open');
+  if (body.classList.contains('open'))
+    setTimeout(() => document.getElementById('agenda-inp-'+idx)?.focus(), 150);
+}
+
+function addMeeting() {
+  const title = document.getElementById('new-meeting-title').value.trim();
+  const date  = document.getElementById('new-meeting-date').value;
+  const client= document.getElementById('new-meeting-client').value;
+  if (!title || !date) { alert('Podaj nazwę i datę.'); return; }
+  meetings.push({ id: Date.now().toString(36), title, date, client, agenda:[], createdAt:Date.now() });
+  saveMe();
+  document.getElementById('new-meeting-title').value = '';
+  document.getElementById('new-meeting-date').value = '';
+  renderMeetings();
+}
+
+function deleteMeeting(idx) {
+  if (!confirm('Usunąć spotkanie?')) return;
+  meetings.splice(idx,1);
+  saveMe(); renderMeetings();
+}
+
+function addAgenda(idx) {
+  const inp = document.getElementById('agenda-inp-'+idx);
+  const val = inp.value.trim(); if (!val) return;
+  if (!meetings[idx].agenda) meetings[idx].agenda = [];
+  meetings[idx].agenda.push({ text:val, done:false });
+  saveMe();
+  inp.value = '';
+  // surgical DOM append
+  const list = document.getElementById('agenda-list-'+idx);
+  const ai = meetings[idx].agenda.length - 1;
+  if (list) {
+    const row = document.createElement('div');
+    row.className = 'agenda-item';
+    row.id = 'agenda-'+idx+'-'+ai;
+    row.innerHTML = `
+      <div class="agenda-check" onclick="toggleAgenda(${idx},${ai})">
+        <svg viewBox="0 0 10 10" fill="none" stroke="white" stroke-width="2"><polyline points="1.5,5 4,7.5 8.5,2.5"/></svg>
+      </div>
+      <span class="agenda-text">${val}</span>
+      <button class="agenda-del" onclick="deleteAgenda(${idx},${ai})">×</button>`;
+    list.appendChild(row);
+  }
+  inp.focus();
+}
+
+function toggleAgenda(idx, ai) {
+  const m = meetings[idx]; if (!m||!m.agenda) return;
+  m.agenda[ai].done = !m.agenda[ai].done;
+  saveMe();
+  const row = document.getElementById('agenda-'+idx+'-'+ai);
+  if (row) {
+    row.querySelector('.agenda-check')?.classList.toggle('done', m.agenda[ai].done);
+    row.querySelector('.agenda-text')?.classList.toggle('done', m.agenda[ai].done);
+  }
+  // update count in header
+  const card = document.getElementById('meeting-card-'+idx);
+  if (card) {
+    const done = m.agenda.filter(a=>a.done).length;
+    const meta = card.querySelector('.meeting-meta');
+    if (meta) {
+      const base = m.date ? new Date(m.date+'T00:00:00').toLocaleDateString('pl-PL',{weekday:'long',day:'numeric',month:'long'}) : '';
+      meta.textContent = base + (m.client?' · '+m.client:'') + ' · '+done+'/'+m.agenda.length+' punktów';
+    }
+  }
+}
+
+function deleteAgenda(idx, ai) {
+  const m = meetings[idx]; if (!m||!m.agenda) return;
+  m.agenda.splice(ai,1);
+  saveMe();
+  // re-render agenda list (indices shift)
+  const list = document.getElementById('agenda-list-'+idx);
+  if (list) {
+    list.innerHTML = m.agenda.map((a,i) => `
+      <div class="agenda-item" id="agenda-${idx}-${i}">
+        <div class="agenda-check${a.done?' done':''}" onclick="toggleAgenda(${idx},${i})">
+          <svg viewBox="0 0 10 10" fill="none" stroke="white" stroke-width="2"><polyline points="1.5,5 4,7.5 8.5,2.5"/></svg>
+        </div>
+        <span class="agenda-text${a.done?' done':''}">${a.text}</span>
+        <button class="agenda-del" onclick="deleteAgenda(${idx},${i})">×</button>
+      </div>`).join('');
+  }
+}
+
+function copyAgenda(idx) {
+  const m = meetings[idx]; if (!m) return;
+  const text = [
+    m.title + ' — ' + m.date,
+    '',
+    'Agenda:',
+    ...(m.agenda||[]).map(a => (a.done?'[x] ':'[ ] ') + a.text)
+  ].join('\n');
+  navigator.clipboard?.writeText(text).then(() => {
+    const btn = document.querySelector(`#meeting-body-${idx} .tact-btn`);
+    if (btn) { btn.textContent='Skopiowano ✓'; setTimeout(()=>btn.textContent='Kopiuj agendę',2000); }
+  });
+}
+
 function getOpenDetails() {
   const open = [];
   document.querySelectorAll('.task-detail.open').forEach(el => {
@@ -1780,6 +2019,7 @@ function restoreOpenDetails(openList) {
 function renderAll2() {
   const open = getOpenDetails();
   renderToday(); renderAll(); renderPlans(); renderClients(); renderSettings();
+  if (activePlansSub==='meetings') renderMeetings();
   if (open.length) restoreOpenDetails(open);
 }
 
