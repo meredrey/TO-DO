@@ -1993,7 +1993,6 @@ function renderPlans() {
       if (panel) panel.insertBefore(banner, panel.firstChild);
     }
   }
-  const today = td();
   // Future tasks (due date in future)
   const future = tasks
     .filter(t => !t.done && t.status !== 'waiting' && t.dueDate && t.dueDate > today)
