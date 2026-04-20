@@ -464,7 +464,16 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
         </div>
         <div id="waiting-who-wrap" class="form-group" style="display:none">
           <label class="form-label">Na kogo / co czekasz?</label>
+          <div style="display:flex;gap:5px;margin-bottom:6px">
+            <button class="toggle-btn sel-e" id="wt-person" onclick="setWaitingType('person')" style="flex:none;padding:5px 12px">Osoba / opis</button>
+            <button class="toggle-btn" id="wt-task" onclick="setWaitingType('task')" style="flex:none;padding:5px 12px">Inne zadanie</button>
+          </div>
           <input type="text" class="form-input" id="f-waiting" placeholder="np. odpowiedź od Nouhy">
+          <div id="f-waiting-task-wrap" style="display:none">
+            <select class="form-input" id="f-waiting-task" style="margin-top:0">
+              <option value="">— wybierz zadanie —</option>
+            </select>
+          </div>
         </div>
         <div class="form-group">
           <label class="form-label">Powtarzanie</label>
@@ -1020,7 +1029,7 @@ function taskHTML(t, showAdd) {
         ${t.estTime && !isQuick ? `<span class="chip chip-time">${fmtTime(t.estTime)}</span>` : ''}
         ${hasNonDefaultPriority ? `<span class="chip ${qc}">${ql}</span>` : ''}
         ${eff ? `<span class="chip ${isOverdue?'chip-overdue':t.dateType==='scheduled'?'chip-scheduled':'chip-due'}">${isOverdue?'! ':''}${t.dateType==='scheduled'?'📅 ':''}${eff}${!t.dueDate?' *':''}</span>` : ''}
-        ${t.status==='waiting' ? `<span class="chip chip-waiting">czekam: ${t.waitingFor||'?'}</span>` : ''}
+        ${t.status==='waiting' ? `<span class="chip chip-waiting">czekam: ${(()=>{const ref=tasks.find(tx=>tx.id===t.waitingFor);return ref?'→ '+ref.name:(t.waitingFor||'?');})()}</span>` : ''}
         ${energyChip}
         ${t.recur&&t.recur!=='none'?`<span class="chip chip-recur">${{daily:'codziennie',weekdays:'dni robocze',weekly:'co tydzień',monthly:'co miesiąc'}[t.recur]||''}</span>`:''}
         ${hasNote  ? '<span class="chip chip-has-note">notatka</span>' : ''}
@@ -1078,7 +1087,7 @@ function taskHTML(t, showAdd) {
     </div>
 
     <div class="dtab-content" id="dt-more-${t.id}">
-      ${t.status==='waiting' && t.waitingFor ? `<div class="waiting-note">Czekam na: ${t.waitingFor}</div>` : ''}
+      ${t.status==='waiting' && t.waitingFor ? `<div class="waiting-note">Czekam na: ${(()=>{const ref=tasks.find(tx=>tx.id===t.waitingFor);return ref?'<strong>'+ref.name+'</strong> ('+ref.client+')':t.waitingFor;})()}</div>` : ''}
       <textarea class="note-area" id="note-${t.id}" placeholder="Notatki, kontekst, szczegóły…" style="margin-top:8px"
         onblur="saveNote('${t.id}')">${t.note||''}</textarea>
       <span class="note-saved" id="note-saved-${t.id}" style="font-size:11px;color:var(--sage);margin-top:4px;display:none">Zapisano ✓</span>
@@ -1520,11 +1529,36 @@ function setRecur(val, btn) {
 function setU(v) { fU=v; document.querySelectorAll('#u-row .toggle-btn').forEach((b,i) => b.className='toggle-btn'+(i+1===v?' sel-u':'')); }
 function setI(v) { fI=v; document.querySelectorAll('#i-row .toggle-btn').forEach((b,i) => b.className='toggle-btn'+(i+1===v?' sel-i':'')); }
 function setE(v) { fE=v; document.querySelectorAll('#e-row .toggle-btn').forEach(b => { const isL = b.textContent.trim()==='niska'; b.className='toggle-btn'+((v==='low'&&isL||v==='high'&&!isL)?' sel-e':''); }); }
+let fWaitingType = 'person';
+
+function setWaitingType(type) {
+  fWaitingType = type;
+  document.getElementById('wt-person').className = 'toggle-btn'+(type==='person'?' sel-e':'');
+  document.getElementById('wt-task').className   = 'toggle-btn'+(type==='task'?' sel-e':'');
+  const txt = document.getElementById('f-waiting');
+  const taskWrap = document.getElementById('f-waiting-task-wrap');
+  if (txt) txt.style.display = type==='person' ? '' : 'none';
+  if (taskWrap) taskWrap.style.display = type==='task' ? 'block' : 'none';
+}
+
+function populateWaitingTasks(excludeId) {
+  const sel = document.getElementById('f-waiting-task');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— wybierz zadanie —</option>' +
+    tasks
+      .filter(t => !t.done && t.id !== excludeId)
+      .sort((a,b) => a.name.localeCompare(b.name, 'pl'))
+      .map(t => `<option value="${t.id}">${t.name}${t.client?' ('+t.client+')':''}</option>`)
+      .join('');
+}
+
 function setStatus(v) {
   fStatus = v;
   document.getElementById('status-todo').className    = 'toggle-btn'+(v==='todo'?'    sel-u':'');
   document.getElementById('status-waiting').className = 'toggle-btn'+(v==='waiting'?' sel-u':'');
-  document.getElementById('waiting-who-wrap').style.display = v==='waiting'?'block':'none';
+  const wrap = document.getElementById('waiting-who-wrap');
+  wrap.style.display = v==='waiting' ? 'block' : 'none';
+  if (v==='waiting') { populateWaitingTasks(editId); setWaitingType(fWaitingType); }
 }
 function toggleDetails() {
   detailsOpen = !detailsOpen;
@@ -1534,7 +1568,7 @@ function toggleDetails() {
 
 /* modal open / close */
 function openModal(id=null) {
-  editId = id; fU=1; fI=1; fE='low'; fStatus='todo'; fRecur='none'; fDateType='deadline'; detailsOpen=false;
+  editId = id; fU=1; fI=1; fE='low'; fStatus='todo'; fRecur='none'; fDateType='deadline'; fWaitingType='person'; detailsOpen=false;
   document.getElementById('detail-mode').style.display = 'none';
   document.getElementById('dtoggle').textContent = '+ więcej opcji';
   document.getElementById('waiting-who-wrap').style.display = 'none';
@@ -1550,7 +1584,16 @@ function openModal(id=null) {
       document.getElementById('f-name').value    = t.name;
       document.getElementById('f-time').value    = t.estTime || '';
       document.getElementById('f-due').value     = t.dueDate || '';
-      document.getElementById('f-waiting').value = t.waitingFor || '';
+      const isTaskRef = t.waitingFor && tasks.some(tx => tx.id === t.waitingFor);
+      fWaitingType = isTaskRef ? 'task' : 'person';
+      document.getElementById('f-waiting').value = isTaskRef ? '' : (t.waitingFor || '');
+      if (isTaskRef) {
+        populateWaitingTasks(id);
+        setTimeout(() => {
+          const sel = document.getElementById('f-waiting-task');
+          if (sel) sel.value = t.waitingFor;
+        }, 50);
+      }
       document.getElementById('f-note').value    = t.note || '';
       sel.value = t.client || clients[0];
       fU=t.urgency||3; fI=t.importance||3; fE=t.energy||'low'; fStatus=t.status||'todo'; fRecur=t.recur||'none'; fDateType=t.dateType||'deadline';
@@ -1568,6 +1611,7 @@ function openModal(id=null) {
     document.getElementById('f-name').focus();
     syncQuickDates();
     setDateType(fDateType);
+    if (fStatus==='waiting') { populateWaitingTasks(editId); setWaitingType(fWaitingType); }
     // sync recur buttons
     document.querySelectorAll('#recur-row .recur-btn').forEach(b => b.classList.toggle('active', b.getAttribute('onclick')?.includes("'"+fRecur+"'")));
   }, 120);
@@ -1582,7 +1626,14 @@ function saveTask() {
   const client     = document.getElementById('f-client').value;
   const estTime    = parseInt(document.getElementById('f-time').value) || null;
   const dueDate    = document.getElementById('f-due').value || null;
-  const waitingFor = document.getElementById('f-waiting').value.trim() || null;
+  let waitingFor = null;
+  if (fStatus === 'waiting') {
+    if (fWaitingType === 'task') {
+      waitingFor = document.getElementById('f-waiting-task')?.value || null;
+    } else {
+      waitingFor = document.getElementById('f-waiting').value.trim() || null;
+    }
+  }
   const note       = document.getElementById('f-note').value.trim() || null;
 
   if (editId) {
@@ -1873,7 +1924,8 @@ function planTaskHTML(t, showUnlock=false) {
   const subProgHTML = sp
     ? `<div class="sub-prog" style="margin-top:4px"><div class="sub-prog-track"><div class="sub-prog-fill" style="width:${Math.round(sp.d/sp.total*100)}%"></div></div><span class="sub-prog-txt">${sp.d}/${sp.total}</span></div>`
     : '';
-  const waitingFor = t.waitingFor ? `<span class="chip chip-waiting">czekam: ${t.waitingFor}</span>` : '';
+  const ref = t.waitingFor ? tasks.find(tx=>tx.id===t.waitingFor) : null;
+  const waitingFor = t.waitingFor ? `<span class="chip chip-waiting">czekam: ${ref?'→ '+ref.name:t.waitingFor}</span>` : '';
   const dueChip = t.dueDate ? `<span class="chip chip-due">${t.dueDate}</span>` : '';
   const unlockBtn = showUnlock
     ? `<button class="tact-btn primary" style="margin-top:8px;font-size:12px" onclick="unlockTask('${t.id}')">Odblokuj →</button>`
