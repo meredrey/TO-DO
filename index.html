@@ -187,6 +187,12 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
 .quick-date-row{display:flex;gap:5px;margin-bottom:4px}
 .qd-btn{flex:1;padding:6px 4px;border:.5px solid var(--bd2);border-radius:8px;background:var(--bg2);font-size:12px;font-weight:500;cursor:pointer;color:var(--text2);transition:all .15s;text-align:center}
 .qd-btn.active{background:var(--sage-l);border-color:var(--sage);color:var(--sage-d)}
+.date-type-toggle{display:flex;gap:0;margin-bottom:6px;border:.5px solid var(--bd2);border-radius:9px;overflow:hidden}
+.dt-btn{flex:1;padding:6px 8px;border:none;background:var(--bg2);font-size:12px;font-weight:500;cursor:pointer;color:var(--text2);transition:all .15s;text-align:center;border-right:.5px solid var(--bd2)}
+.dt-btn:last-child{border-right:none}
+.dt-btn.active-dl{background:var(--rose-l);color:var(--rose)}
+.dt-btn.active-sc{background:var(--lavender-l);color:var(--lavender)}
+.chip-scheduled{background:var(--lavender-l);color:var(--lavender)}
 .recur-row{display:flex;gap:5px;flex-wrap:wrap}
 .recur-btn{padding:5px 10px;border:.5px solid var(--bd);border-radius:8px;background:var(--bg2);font-size:12px;font-weight:500;cursor:pointer;color:var(--text2);transition:all .15s}
 .recur-btn.active{background:var(--lavender-l);border-color:var(--lavender);color:var(--lavender)}
@@ -403,7 +409,11 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
         <select class="form-input" id="f-client"></select>
       </div>
       <div class="form-group">
-        <label class="form-label">Due date</label>
+        <label class="form-label">Data</label>
+        <div class="date-type-toggle">
+          <button class="dt-btn active-dl" id="dt-deadline" onclick="setDateType('deadline')">Deadline (do kiedy)</button>
+          <button class="dt-btn" id="dt-scheduled" onclick="setDateType('scheduled')">Konkretny dzień</button>
+        </div>
         <div class="quick-date-row">
           <button class="qd-btn" id="qd-today" onclick="setQuickDate('today')">Dziś</button>
           <button class="qd-btn" id="qd-tomorrow" onclick="setQuickDate('tomorrow')">Jutro</button>
@@ -411,6 +421,7 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
           <button class="qd-btn" id="qd-none" onclick="setQuickDate('none')">Brak</button>
         </div>
         <input type="date" class="form-input" id="f-due" oninput="syncQuickDates()" style="margin-top:5px">
+        <div id="dt-hint" style="font-size:11px;color:var(--text3);margin-top:4px">Możesz zrobić wcześniej jeśli masz czas.</div>
       </div>
       <div style="display:flex;justify-content:flex-end;margin-bottom:13px">
         <span class="ql" onclick="toggleDetails()" id="dtoggle">+ więcej opcji</span>
@@ -499,7 +510,7 @@ let gsUrl        = localStorage.getItem(GK) || '';
 let maxDay       = parseInt(localStorage.getItem(MK) || '5');
 
 let editId = null, detailsOpen = false;
-let fU = 1, fI = 1, fE = 'low', fStatus = 'todo', fRecur = 'none';
+let fU = 1, fI = 1, fE = 'low', fStatus = 'todo', fRecur = 'none', fDateType = 'deadline';
 let allFilter = 'all';
 
 const CL_COLORS = ['#6b9478','#8a6b7e','#5e8e90','#9e7e4a','#7a6e9e','#7a8a6b','#6b7a8e','#8e6b6b'];
@@ -527,8 +538,14 @@ let bgImg = null;
 
 function initCanvas() {
   const wrap = document.getElementById('hero-wrap');
-  const dpr  = window.devicePixelRatio || 1;
+  if (!wrap) return;
+  const dpr = window.devicePixelRatio || 1;
   const W = wrap.offsetWidth, H = wrap.offsetHeight;
+  // guard: if layout not ready yet, retry
+  if (W === 0 || H === 0) {
+    setTimeout(initCanvas, 100);
+    return;
+  }
   canvas.width  = W * dpr;
   canvas.height = H * dpr;
   canvas.style.width  = W + 'px';
@@ -542,10 +559,17 @@ function initCanvas() {
     const img = new Image();
     img.onload = () => {
       bgImg = img;
-      drawBg(W, H);
+      // re-check dimensions in case layout changed during load
+      const W2 = wrap.offsetWidth, H2 = wrap.offsetHeight;
+      if (W2 > 0 && H2 > 0) {
+        canvas.width = W2*dpr; canvas.height = H2*dpr;
+        ctx.setTransform(dpr,0,0,dpr,0,0);
+      }
+      drawBg(canvas.width/dpr, canvas.height/dpr);
       bgImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       syncTiles(); scheduleRender();
     };
+    img.onerror = () => { syncTiles(); scheduleRender(); };
     img.src = BG_DATA_URL;
   }
 }
@@ -898,17 +922,24 @@ function subProg(t) {
 
 function getDayList() {
   const today = td();
-  // eligible = not done, not waiting, and dueDate is today or in the past or not set
-  const pending = tasks.filter(t =>
-    !t.done &&
-    t.status !== 'waiting' &&
-    (!effectiveDueDate(t) || effectiveDueDate(t) <= today)
-  );
+  // pending: deadline tasks (date<=today or no date) + scheduled tasks (exact today)
+  const pending = tasks.filter(t => {
+    if (t.done || t.status === 'waiting') return false;
+    const edd = effectiveDueDate(t);
+    if (t.dateType === 'scheduled') return edd === today;
+    return !edd || edd <= today;
+  });
   const sorted = [...pending].sort((a,b) => taskScore(b) - taskScore(a));
 
   // already assigned today (and still eligible)
-  const aIds    = new Set(tasks.filter(t => t.dayAssigned===today && !t.done && t.status!=='waiting' && (!effectiveDueDate(t) || effectiveDueDate(t) <= today)).map(t=>t.id));
-  const dayList = tasks.filter(t => t.dayAssigned===today && !t.done && t.status!=='waiting' && (!effectiveDueDate(t) || effectiveDueDate(t) <= today));
+  const isEligible = t => {
+    if (t.done || t.status==='waiting') return false;
+    const edd = effectiveDueDate(t);
+    if (t.dateType==='scheduled') return edd===today;
+    return !edd || edd<=today;
+  };
+  const aIds    = new Set(tasks.filter(t => t.dayAssigned===today && isEligible(t)).map(t=>t.id));
+  const dayList = tasks.filter(t => t.dayAssigned===today && isEligible(t));
 
   // auto-fill up to maxDay
   for (const t of sorted) {
@@ -978,7 +1009,7 @@ function taskHTML(t, showAdd) {
         ${isQuick ? '<span class="chip chip-quick">&lt;10min</span>' : ''}
         ${t.estTime && !isQuick ? `<span class="chip chip-time">${fmtTime(t.estTime)}</span>` : ''}
         ${hasNonDefaultPriority ? `<span class="chip ${qc}">${ql}</span>` : ''}
-        ${eff ? `<span class="chip ${isOverdue?'chip-overdue':'chip-due'}">${isOverdue?'! ':''}${eff}${!t.dueDate?' *':''}</span>` : ''}
+        ${eff ? `<span class="chip ${isOverdue?'chip-overdue':t.dateType==='scheduled'?'chip-scheduled':'chip-due'}">${isOverdue?'! ':''}${t.dateType==='scheduled'?'📅 ':''}${eff}${!t.dueDate?' *':''}</span>` : ''}
         ${t.status==='waiting' ? `<span class="chip chip-waiting">czekam: ${t.waitingFor||'?'}</span>` : ''}
         ${energyChip}
         ${t.recur&&t.recur!=='none'?`<span class="chip chip-recur">${{daily:'codziennie',weekdays:'dni robocze',weekly:'co tydzień',monthly:'co miesiąc'}[t.recur]||''}</span>`:''}
@@ -1438,24 +1469,38 @@ function weeklyReview() {
 function setAllFilter(f) { allFilter = f; renderAll(); }
 
 /* form toggles */
+function setDateType(type) {
+  fDateType = type;
+  const dlBtn = document.getElementById('dt-deadline');
+  const scBtn = document.getElementById('dt-scheduled');
+  const hint  = document.getElementById('dt-hint');
+  if (dlBtn) { dlBtn.className = 'dt-btn' + (type==='deadline'?' active-dl':''); }
+  if (scBtn) { scBtn.className = 'dt-btn' + (type==='scheduled'?' active-sc':''); }
+  if (hint) {
+    hint.textContent = type==='deadline'
+      ? 'Możesz zrobić wcześniej jeśli masz czas.'
+      : 'Pojawi się w zakładce Dziś tylko w ten konkretny dzień.';
+    hint.style.color = type==='scheduled' ? 'var(--lavender)' : 'var(--text3)';
+  }
+}
 function setQuickDate(which) {
   const inp = document.getElementById('f-due');
   const d = new Date();
-  if (which==='today')    { inp.value = d.toISOString().split('T')[0]; }
+  if (which==='today')         { inp.value = d.toISOString().split('T')[0]; }
   else if (which==='tomorrow') { d.setDate(d.getDate()+1); inp.value = d.toISOString().split('T')[0]; }
-  else if (which==='week') { d.setDate(d.getDate()+7); inp.value = d.toISOString().split('T')[0]; }
+  else if (which==='week')     { d.setDate(d.getDate()+7); inp.value = d.toISOString().split('T')[0]; }
   else { inp.value = ''; }
   syncQuickDates();
 }
 function syncQuickDates() {
-  const val = document.getElementById('f-due').value;
-  const today = new Date().toISOString().split('T')[0];
+  const val      = document.getElementById('f-due')?.value || '';
+  const today    = new Date().toISOString().split('T')[0];
   const tomorrow = new Date(Date.now()+86400000).toISOString().split('T')[0];
-  const week = new Date(Date.now()+7*86400000).toISOString().split('T')[0];
-  document.getElementById('qd-today').classList.toggle('active', val===today);
-  document.getElementById('qd-tomorrow').classList.toggle('active', val===tomorrow);
-  document.getElementById('qd-week').classList.toggle('active', val===week);
-  document.getElementById('qd-none').classList.toggle('active', !val);
+  const week     = new Date(Date.now()+7*86400000).toISOString().split('T')[0];
+  document.getElementById('qd-today')?.classList.toggle('active', val===today);
+  document.getElementById('qd-tomorrow')?.classList.toggle('active', val===tomorrow);
+  document.getElementById('qd-week')?.classList.toggle('active', val===week);
+  document.getElementById('qd-none')?.classList.toggle('active', !val);
 }
 function setRecur(val, btn) {
   fRecur = val;
@@ -1479,7 +1524,7 @@ function toggleDetails() {
 
 /* modal open / close */
 function openModal(id=null) {
-  editId = id; fU=1; fI=1; fE='low'; fStatus='todo'; fRecur='none'; detailsOpen=false;
+  editId = id; fU=1; fI=1; fE='low'; fStatus='todo'; fRecur='none'; fDateType='deadline'; detailsOpen=false;
   document.getElementById('detail-mode').style.display = 'none';
   document.getElementById('dtoggle').textContent = '+ więcej opcji';
   document.getElementById('waiting-who-wrap').style.display = 'none';
@@ -1498,7 +1543,7 @@ function openModal(id=null) {
       document.getElementById('f-waiting').value = t.waitingFor || '';
       document.getElementById('f-note').value    = t.note || '';
       sel.value = t.client || clients[0];
-      fU=t.urgency||3; fI=t.importance||3; fE=t.energy||'low'; fStatus=t.status||'todo'; fRecur=t.recur||'none';
+      fU=t.urgency||3; fI=t.importance||3; fE=t.energy||'low'; fStatus=t.status||'todo'; fRecur=t.recur||'none'; fDateType=t.dateType||'deadline';
       detailsOpen=true;
       document.getElementById('detail-mode').style.display = 'block';
       document.getElementById('dtoggle').textContent = '− mniej opcji';
@@ -1512,6 +1557,7 @@ function openModal(id=null) {
   setTimeout(() => {
     document.getElementById('f-name').focus();
     syncQuickDates();
+    setDateType(fDateType);
     // sync recur buttons
     document.querySelectorAll('#recur-row .recur-btn').forEach(b => b.classList.toggle('active', b.getAttribute('onclick')?.includes("'"+fRecur+"'")));
   }, 120);
@@ -1534,14 +1580,14 @@ function saveTask() {
     if (t) {
       const newEdd = dueDate || (t.subtasks||[]).map(s=>s.dueDate).filter(Boolean).sort()[0] || null;
       if (newEdd && newEdd > td() && t.dayAssigned === td()) t.dayAssigned = null;
-      Object.assign(t, {name,client,estTime,dueDate,urgency:fU,importance:fI,energy:fE,status:fStatus,waitingFor,note,recur:fRecur,updatedAt:Date.now()});
+      Object.assign(t, {name,client,estTime,dueDate,urgency:fU,importance:fI,energy:fE,status:fStatus,waitingFor,note,recur:fRecur,dateType:fDateType,updatedAt:Date.now()});
       syncTask(t);
     }
   } else {
     const newTask = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2,5),
       name, client, estTime, dueDate, urgency:fU, importance:fI, energy:fE,
-      status:fStatus, waitingFor, note, recur:fRecur, done:false, subtasks:[], links:[],
+      status:fStatus, waitingFor, note, recur:fRecur, dateType:fDateType, done:false, subtasks:[], links:[],
       createdAt: Date.now(), dayAssigned: null
     };
     tasks.push(newTask);
@@ -1703,6 +1749,9 @@ function renderPlans() {
   const future = tasks
     .filter(t => !t.done && t.status !== 'waiting' && t.dueDate && t.dueDate > today)
     .sort((a,b) => a.dueDate.localeCompare(b.dueDate));
+  // mark scheduled vs deadline in plans
+  const scheduledFuture = future.filter(t => t.dateType==='scheduled');
+  const deadlineFuture  = future.filter(t => t.dateType!=='scheduled');
   // Blocked tasks (waiting)
   const waiting = tasks.filter(t => !t.done && t.status === 'waiting');
 
@@ -2046,7 +2095,8 @@ function initDate() {
 window.addEventListener('resize', () => { initCanvas(); });
 initDate();
 renderAll2();
-initCanvas();
+// wait for layout before canvas init
+requestAnimationFrame(() => requestAnimationFrame(initCanvas));
 </script>
 
 </body>
