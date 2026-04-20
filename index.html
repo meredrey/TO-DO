@@ -1691,12 +1691,13 @@ function renderClients() {
     const notes   = clientNotes[cl] || [];
     const bulletsHTML = notes.length
       ? `<ul class="bullet-list">${notes.map((n,ni) => `
-          <li class="bullet-item">
+          <li class="bullet-item" id="bullet-${i}-${ni}">
             <div class="bullet-dot"></div>
-            <span style="flex:1">${n}</span>
+            <span class="bullet-text" style="flex:1" onclick="editBullet('${cl}',${i},${ni})">${n}</span>
+            <button class="bullet-action" title="Zamień w zadanie" onclick="bulletToTask('${cl}','${n}',${ni})" style="background:none;border:none;cursor:pointer;color:var(--sage);font-size:11px;padding:0 4px;flex-shrink:0;font-family:inherit;font-weight:500">→ zadanie</button>
             <button class="bullet-del" onclick="deleteBullet('${cl}',${ni})">×</button>
           </li>`).join('')}</ul>`
-      : '<div style="font-size:12px;color:var(--text3);margin-bottom:8px">Brak notatek.</div>';
+      : '<div style="font-size:12px;color:var(--text3);margin-bottom:8px">Brak notatek. Dodaj pierwszą poniżej.</div>';
     return `<div class="client-card" id="client-card-${i}">
       <div class="client-card-header" onclick="toggleClientCard(${i})">
         <div class="client-dot" style="background:${color}"></div>
@@ -1731,20 +1732,92 @@ function addBullet(cl, i) {
   const inp = document.getElementById('bullet-inp-'+i);
   const val = inp.value.trim(); if (!val) return;
   if (!clientNotes[cl]) clientNotes[cl] = [];
+  const ni = clientNotes[cl].length;
   clientNotes[cl].push(val);
   saveCN(); inp.value = '';
-  renderClients();
-  // reopen card
-  setTimeout(() => {
-    const body = document.getElementById('client-body-'+i);
-    if (body) { body.classList.add('open'); document.getElementById('bullet-inp-'+i)?.focus(); }
-  }, 0);
+
+  // surgical DOM update — keep card open
+  const body = document.getElementById('client-body-'+i);
+  if (body) {
+    // remove empty placeholder if present
+    const placeholder = body.querySelector('div[style*="color"]');
+    if (placeholder && placeholder.textContent.includes('Brak')) placeholder.remove();
+    // find or create list
+    let list = body.querySelector('.bullet-list');
+    if (!list) {
+      list = document.createElement('ul');
+      list.className = 'bullet-list';
+      body.insertBefore(list, body.querySelector('.add-bullet-row'));
+    }
+    const li = document.createElement('li');
+    li.className = 'bullet-item';
+    li.id = 'bullet-'+i+'-'+ni;
+    li.innerHTML = `
+      <div class="bullet-dot"></div>
+      <span class="bullet-text" style="flex:1" onclick="editBullet('${cl}',${i},${ni})">${val}</span>
+      <button class="bullet-action" title="Zamień w zadanie" onclick="bulletToTask('${cl}','${val}',${ni})" style="background:none;border:none;cursor:pointer;color:var(--sage);font-size:11px;padding:0 4px;flex-shrink:0;font-family:inherit;font-weight:500">→ zadanie</button>
+      <button class="bullet-del" onclick="deleteBullet('${cl}',${ni})">×</button>`;
+    list.appendChild(li);
+    inp.focus();
+    // update count in header
+    const countEl = document.querySelector('#client-card-'+i+' .client-meta');
+    if (countEl) countEl.textContent = countEl.textContent.replace(/· \d+ notatek/, '') + ' · ' + clientNotes[cl].length + ' notatek';
+  }
 }
 
 function deleteBullet(cl, ni) {
   if (!clientNotes[cl]) return;
   clientNotes[cl].splice(ni, 1);
   saveCN(); renderClients();
+  // keep cards open after re-render
+  setTimeout(() => {
+    document.querySelectorAll('.client-card-body').forEach(b => {
+      const idx = b.id.replace('client-body-','');
+      const card = document.getElementById('client-card-'+idx);
+      if (card && card.classList.contains('was-open')) b.classList.add('open');
+    });
+  }, 0);
+}
+
+function editBullet(cl, i, ni) {
+  const span = document.querySelector('#bullet-'+i+'-'+ni+' .bullet-text');
+  if (!span) return;
+  const current = clientNotes[cl]?.[ni] || '';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = current;
+  input.className = 'form-input';
+  input.style.cssText = 'font-size:13px;padding:4px 8px;height:auto;flex:1';
+  span.replaceWith(input);
+  input.focus();
+  input.select();
+  function save() {
+    const newVal = input.value.trim();
+    if (newVal && clientNotes[cl]) {
+      clientNotes[cl][ni] = newVal;
+      saveCN();
+    }
+    renderClients();
+  }
+  input.addEventListener('blur', save);
+  input.addEventListener('keydown', e => { if(e.key==='Enter') save(); if(e.key==='Escape') renderClients(); });
+}
+
+function bulletToTask(cl, text, ni) {
+  // Pre-fill modal with bullet text and client
+  openModal();
+  setTimeout(() => {
+    document.getElementById('f-name').value = text;
+    const sel = document.getElementById('f-client');
+    if (sel) {
+      for (let opt of sel.options) { if (opt.value === cl) { sel.value = cl; break; } }
+    }
+    // optionally delete the bullet after converting
+    document.getElementById('save-btn').addEventListener('click', function onSave() {
+      deleteBullet(cl, ni);
+      this.removeEventListener('click', onSave);
+    }, { once: true });
+  }, 150);
 }
 
 function renderSettings() {
