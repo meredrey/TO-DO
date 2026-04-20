@@ -184,6 +184,13 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
 .toggle-btn.sel-i{background:var(--sage-l);border-color:var(--sage);color:var(--sage-d)}
 .toggle-btn.sel-e{background:var(--teal-l);border-color:var(--teal);color:var(--teal)}
 .ql{font-size:12px;color:var(--sage);cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.prio-row{display:flex;gap:6px;margin-bottom:13px}
+.prio-btn{flex:1;padding:9px 4px;border:.5px solid var(--bd);border-radius:10px;background:var(--bg2);font-size:12px;font-weight:500;cursor:pointer;text-align:center;transition:all .15s;color:var(--text2);line-height:1.3}
+.prio-btn .prio-label{display:block;font-size:10px;color:var(--text3);margin-top:2px;font-weight:400}
+.prio-btn.sel-q1{background:var(--rose-l);border-color:var(--rose);color:var(--rose)}
+.prio-btn.sel-q2{background:var(--sage-l);border-color:var(--sage);color:var(--sage-d)}
+.prio-btn.sel-q3{background:var(--amber-l);border-color:var(--amber);color:var(--amber)}
+.prio-btn.sel-q4{background:var(--bg2);border-color:var(--bd2);color:var(--text2)}
 .quick-date-row{display:flex;gap:5px;margin-bottom:4px}
 .qd-btn{flex:1;padding:6px 4px;border:.5px solid var(--bd2);border-radius:8px;background:var(--bg2);font-size:12px;font-weight:500;cursor:pointer;color:var(--text2);transition:all .15s;text-align:center}
 .qd-btn.active{background:var(--sage-l);border-color:var(--sage);color:var(--sage-d)}
@@ -423,6 +430,17 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
         <input type="date" class="form-input" id="f-due" oninput="syncQuickDates()" style="margin-top:5px">
         <div id="dt-hint" style="font-size:11px;color:var(--text3);margin-top:4px">Możesz zrobić wcześniej jeśli masz czas.</div>
       </div>
+      <!-- PRIORITY QUICK PICK — always visible -->
+      <div class="form-group">
+        <label class="form-label">Priorytet</label>
+        <div class="prio-row" id="prio-row">
+          <button class="prio-btn" id="pq1" onclick="setPrio(3,3)">🔴 Pilne<span class="prio-label">+ ważne</span></button>
+          <button class="prio-btn" id="pq2" onclick="setPrio(1,3)">🟢 Ważne<span class="prio-label">niepilne</span></button>
+          <button class="prio-btn" id="pq3" onclick="setPrio(3,1)">🟡 Pilne<span class="prio-label">nieważne</span></button>
+          <button class="prio-btn sel-q4" id="pq4" onclick="setPrio(1,1)">⚪ Brak<span class="prio-label">priorytet</span></button>
+        </div>
+      </div>
+
       <div style="display:flex;justify-content:flex-end;margin-bottom:13px">
         <span class="ql" onclick="toggleDetails()" id="dtoggle">+ więcej opcji</span>
       </div>
@@ -433,7 +451,7 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
           <input type="number" class="form-input" id="f-time" placeholder="30" min="1">
         </div>
         <div class="form-group">
-          <label class="form-label">Pilność</label>
+          <label class="form-label">Pilność (szczegółowo)</label>
           <div class="toggle-row" id="u-row">
             <button class="toggle-btn sel-u" onclick="setU(1)">niska</button>
             <button class="toggle-btn" onclick="setU(2)">średnia</button>
@@ -441,7 +459,7 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
           </div>
         </div>
         <div class="form-group">
-          <label class="form-label">Ważność</label>
+          <label class="form-label">Ważność (szczegółowo)</label>
           <div class="toggle-row" id="i-row">
             <button class="toggle-btn sel-i" onclick="setI(1)">niska</button>
             <button class="toggle-btn" onclick="setI(2)">średnia</button>
@@ -1526,8 +1544,44 @@ function setRecur(val, btn) {
   document.querySelectorAll('#recur-row .recur-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
 }
-function setU(v) { fU=v; document.querySelectorAll('#u-row .toggle-btn').forEach((b,i) => b.className='toggle-btn'+(i+1===v?' sel-u':'')); }
-function setI(v) { fI=v; document.querySelectorAll('#i-row .toggle-btn').forEach((b,i) => b.className='toggle-btn'+(i+1===v?' sel-i':'')); }
+function setPrio(u, i) {
+  fU=u; fI=i;
+  // sync detailed rows
+  document.querySelectorAll('#u-row .toggle-btn').forEach((b,idx) => b.className='toggle-btn'+(idx+1===u?' sel-u':''));
+  document.querySelectorAll('#i-row .toggle-btn').forEach((b,idx) => b.className='toggle-btn'+(idx+1===i?' sel-i':''));
+  // highlight prio button
+  syncPrioButtons();
+}
+function syncPrioButtons() {
+  const isQ1 = fU>=2 && fI>=2;
+  const isQ2 = fI>=2 && fU<2;
+  const isQ3 = fU>=2 && fI<2;
+  const isQ4 = fU<2 && fI<2;
+  document.getElementById('pq1')?.classList.toggle('sel-q1', isQ1);
+  document.getElementById('pq2')?.classList.toggle('sel-q2', isQ2);
+  document.getElementById('pq3')?.classList.toggle('sel-q3', isQ3);
+  document.getElementById('pq4')?.classList.toggle('sel-q4', isQ4);
+  ['pq1','pq2','pq3','pq4'].forEach((id,idx) => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    const active = [isQ1,isQ2,isQ3,isQ4][idx];
+    if (!active) btn.className = 'prio-btn';
+  });
+  if (document.getElementById('pq1') && isQ1) document.getElementById('pq1').className='prio-btn sel-q1';
+  if (document.getElementById('pq2') && isQ2) document.getElementById('pq2').className='prio-btn sel-q2';
+  if (document.getElementById('pq3') && isQ3) document.getElementById('pq3').className='prio-btn sel-q3';
+  if (document.getElementById('pq4') && isQ4) document.getElementById('pq4').className='prio-btn sel-q4';
+}
+function setU(v) {
+  fU=v;
+  document.querySelectorAll('#u-row .toggle-btn').forEach((b,i) => b.className='toggle-btn'+(i+1===v?' sel-u':''));
+  syncPrioButtons();
+}
+function setI(v) {
+  fI=v;
+  document.querySelectorAll('#i-row .toggle-btn').forEach((b,i) => b.className='toggle-btn'+(i+1===v?' sel-i':''));
+  syncPrioButtons();
+}
 function setE(v) { fE=v; document.querySelectorAll('#e-row .toggle-btn').forEach(b => { const isL = b.textContent.trim()==='niska'; b.className='toggle-btn'+((v==='low'&&isL||v==='high'&&!isL)?' sel-e':''); }); }
 let fWaitingType = 'person';
 
@@ -1611,6 +1665,7 @@ function openModal(id=null) {
     document.getElementById('f-name').focus();
     syncQuickDates();
     setDateType(fDateType);
+    syncPrioButtons();
     if (fStatus==='waiting') { populateWaitingTasks(editId); setWaitingType(fWaitingType); }
     // sync recur buttons
     document.querySelectorAll('#recur-row .recur-btn').forEach(b => b.classList.toggle('active', b.getAttribute('onclick')?.includes("'"+fRecur+"'")));
