@@ -815,12 +815,29 @@ function effectiveDueDate(t) {
 function taskScore(t) {
   if (t.status === 'waiting') return -1;
   let s = 0;
-  if ((t.estTime||999) < 10) s += 100;
+
+  // 1. Private tasks get lower priority than work tasks
+  const isPrivate = t.client === 'Prywatne';
+  if (!isPrivate) s += 200;
+
+  // 2. Quick wins (<10 min) — highest priority regardless of quadrant
+  const isQuickWin = (t.estTime||999) < 10;
+  if (isQuickWin) s += 150;
+
+  // 3. Eisenhower quadrant (only matters for non-quick tasks)
+  if (!isQuickWin) {
+    const u = t.urgency||1, i = t.importance||1;
+    if (u>=2 && i>=2) s += 80;  // urgent + important
+    else if (i>=2)    s += 60;  // important, not urgent
+    else if (u>=2)    s += 40;  // urgent, not important
+    else              s += 0;   // neither
+  }
+
+  // 4. Due date boost (on top of quadrant)
   const edd = effectiveDueDate(t);
-  if (edd && edd < td()) s += 80;
-  if (edd === td()) s += 50;
-  if (!edd) s += 10;
-  s += qScore(t) * 10;
+  if (edd && edd < td()) s += 30;  // overdue
+  if (edd === td())      s += 20;  // due today
+
   return s;
 }
 function qChip(t) {
