@@ -877,31 +877,41 @@ function effectiveDueDate(t) {
 
 function taskScore(t) {
   if (t.status === 'waiting') return -1;
-  let s = 0;
 
-  // 1. Private tasks get lower priority than work tasks
+  // Priority order (strict tiers, multiplied to avoid overlap):
+  // Tier 1: work vs private (1000 gap)
+  // Tier 2 within work/private: quick wins first, then Eisenhower
+  // Tier 3: due date boost (small, tiebreaker only)
+  //
+  // Result order:
+  // 1. Work + quick win (<10min)
+  // 2. Work + ważne+pilne
+  // 3. Work + ważne, niepilne
+  // 4. Work + pilne, nieważne
+  // 5. Work + brak tagów
+  // 6. Prywatne + quick win
+  // 7. Prywatne + ważne+pilne
+  // ... itd.
+
   const isPrivate = t.client === 'Prywatne';
-  if (!isPrivate) s += 200;
-
-  // 2. Quick wins (<10 min) — highest priority regardless of quadrant
   const isQuickWin = (t.estTime||999) < 10;
-  if (isQuickWin) s += 150;
-
-  // 3. Eisenhower quadrant (only matters for non-quick tasks)
-  if (!isQuickWin) {
-    const u = t.urgency||1, i = t.importance||1;
-    if (u>=2 && i>=2) s += 80;  // urgent + important
-    else if (i>=2)    s += 60;  // important, not urgent
-    else if (u>=2)    s += 40;  // urgent, not important
-    else              s += 0;   // neither
-  }
-
-  // 4. Due date boost (on top of quadrant)
+  const u = t.urgency||1, i = t.importance||1;
   const edd = effectiveDueDate(t);
-  if (edd && edd < td()) s += 30;  // overdue
-  if (edd === td())      s += 20;  // due today
 
-  return s;
+  let tier1 = isPrivate ? 0 : 1000;
+
+  let tier2;
+  if (isQuickWin)       tier2 = 400;
+  else if (u>=2&&i>=2)  tier2 = 300;
+  else if (i>=2)        tier2 = 200;
+  else if (u>=2)        tier2 = 100;
+  else                  tier2 = 0;
+
+  let tier3 = 0;
+  if (edd && edd < td()) tier3 = 20;
+  else if (edd === td()) tier3 = 10;
+
+  return tier1 + tier2 + tier3;
 }
 function qChip(t) {
   const u = t.urgency||1, i = t.importance||1;
