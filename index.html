@@ -837,39 +837,40 @@ function scheduleAutoSync() {
   syncTimer = setTimeout(() => syncAll(), 3000);
 }
 
-// Upsert single task via GET
+// Single task upsert — POST no-cors (fire & forget)
 async function syncTask(task) {
   if (!gsUrl) return;
   try {
-    const url = gsUrl + '?action=upsert&data=' + encodeURIComponent(JSON.stringify(task));
-    await fetch(url);
+    await fetch(gsUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'upsert', task })
+    });
   } catch(e) { /* silent */ }
 }
 
-// Full sync: send all tasks one by one via GET, then verify
+// Full sync — POST no-cors, then verify via GET
 async function syncAll() {
   if (!gsUrl) { setSyncStatus('Brak URL — ustaw Apps Script URL w ustawieniach.', 'err'); return; }
   clearTimeout(syncTimer);
   setSyncStatus('Synchronizuję…');
   try {
-    const gs = gsUrl.split('?')[0];
-
-    // 1. reset sheet with clients info
-    await fetch(gs + '?action=syncAll&data=' + encodeURIComponent(JSON.stringify({ tasks: [], clients })));
-
-    // 2. upsert each task individually
-    let ok = 0;
-    for (const t of tasks) {
-      try {
-        const r = await fetch(gs + '?action=upsert&data=' + encodeURIComponent(JSON.stringify(t)));
-        const d = await r.json();
-        if (d.ok) ok++;
-      } catch(e) { /* continue */ }
-    }
-
-    // 3. show result
+    await fetch(gsUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'syncAll', tasks, clients })
+    });
+    // verify after 2s via GET
+    await new Promise(r => setTimeout(r, 2000));
+    const resp = await fetch(gsUrl + '?action=getTasks');
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const d = await resp.json();
+    const count = Array.isArray(d) ? d.length : 0;
     const ts = new Date().toLocaleTimeString('pl-PL', {hour:'2-digit',minute:'2-digit'});
-    setSyncStatus('✓ ' + ok + '/' + tasks.length + ' zadań · ' + ts, 'ok');
+    if (count > 0) setSyncStatus('✓ ' + count + ' zadań · ' + ts, 'ok');
+    else setSyncStatus('Synchronizuję…');
   } catch(e) {
     setSyncStatus('Błąd: ' + e.message, 'err');
     console.error('syncAll:', e);
