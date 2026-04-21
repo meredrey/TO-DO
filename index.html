@@ -184,6 +184,18 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
 .toggle-btn.sel-i{background:var(--sage-l);border-color:var(--sage);color:var(--sage-d)}
 .toggle-btn.sel-e{background:var(--teal-l);border-color:var(--teal);color:var(--teal)}
 .ql{font-size:12px;color:var(--sage);cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.quick-controls{display:flex;flex-wrap:wrap;gap:5px;padding:8px 14px;border-top:.5px solid var(--bd);background:var(--bg2)}
+.qc-btn{display:flex;align-items:center;gap:4px;padding:5px 9px;border:.5px solid var(--bd2);border-radius:20px;background:var(--bg);font-size:11px;font-weight:500;cursor:pointer;color:var(--text2);transition:all .15s;white-space:nowrap;font-family:inherit}
+.qc-btn:hover{border-color:var(--sage);color:var(--sage)}
+.qc-btn.active-prio1{background:var(--rose-l);border-color:var(--rose);color:var(--rose)}
+.qc-btn.active-prio2{background:var(--sage-l);border-color:var(--sage);color:var(--sage-d)}
+.qc-btn.active-prio3{background:var(--amber-l);border-color:var(--amber);color:var(--amber)}
+.qc-btn.active-wait{background:var(--amber-l);border-color:var(--amber);color:var(--amber)}
+.qc-btn.active-recur{background:var(--lavender-l);border-color:var(--lavender);color:var(--lavender)}
+.qc-date-inp{font-size:11px;padding:5px 8px;border:.5px solid var(--bd2);border-radius:20px;background:var(--bg);color:var(--text2);cursor:pointer;font-family:inherit;max-width:120px}
+.qc-date-inp:focus{outline:none;border-color:var(--sage);color:var(--text)}
+.qc-select{font-size:11px;padding:5px 8px;border:.5px solid var(--bd2);border-radius:20px;background:var(--bg);color:var(--text2);cursor:pointer;font-family:inherit;max-width:110px}
+.qc-select:focus{outline:none;border-color:var(--sage)}
 .mode-toggle{display:flex;gap:0;background:var(--bg2);border-radius:20px;padding:3px;margin:10px 16px 0;border:.5px solid var(--bd)}
 .mode-btn{flex:1;padding:7px 0;border:none;background:transparent;border-radius:17px;font-size:13px;font-weight:500;color:var(--text2);cursor:pointer;transition:all .2s;text-align:center}
 .mode-btn.active-work{background:var(--sage);color:white;box-shadow:0 1px 4px rgba(107,148,120,.35)}
@@ -378,13 +390,6 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
     </div>
 
     <div class="settings-section">
-      <div class="settings-section-title">Google Sheets sync</div>
-      <p style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.5">Wklej URL swojego Google Apps Script (wdróż jako Web App z dostępem "Anyone"). Dane będą synchronizowane przy każdej zmianie.</p>
-      <div class="form-group">
-        <label class="form-label">Apps Script URL</label>
-        <input type="text" class="form-input" id="gs-url" placeholder="https://script.google.com/macros/s/...">
-      </div>
-      <button class="btn-primary" onclick="saveGsUrl()" style="margin-top:0">Zapisz URL</button>
       <div class="sync-status" id="sync-status"></div>
     </div>
 
@@ -1090,10 +1095,34 @@ function taskHTML(t, showAdd) {
       <button class="task-expand-btn" id="exp-${t.id}" title="Rozwiń">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
-      <button class="edit-inline-btn" onclick="event.stopPropagation();openModal('${t.id}')" title="Edytuj zadanie">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-      </button>
     </div>
+  </div>
+
+  <!-- QUICK CONTROLS — always visible -->
+  <div class="quick-controls" onclick="event.stopPropagation()">
+    <!-- Priority -->
+    <button class="qc-btn ${ (t.urgency||1)>=2&&(t.importance||1)>=2?'active-prio1':(t.importance||1)>=2?'active-prio2':(t.urgency||1)>=2?'active-prio3':'' }"
+      onclick="cycleQcPrio('${t.id}',this)" title="Priorytet">
+      <span class="prio-dot" style="background:${ (t.urgency||1)>=2&&(t.importance||1)>=2?'#c04040':(t.importance||1)>=2?'#5e8e5e':(t.urgency||1)>=2?'#b8881a':'var(--bd2)' }"></span>
+      ${ (t.urgency||1)>=2&&(t.importance||1)>=2?'Pilne+ważne':(t.importance||1)>=2?'Ważne':(t.urgency||1)>=2?'Pilne':'Priorytet' }
+    </button>
+    <!-- Client -->
+    <select class="qc-select" onchange="inlineSave('${t.id}','client',this.value)" title="Klient">
+      ${clients.map(cl=>`<option value="${cl}" ${cl===t.client?'selected':''}>${cl}</option>`).join('')}
+    </select>
+    <!-- Date -->
+    <input type="date" class="qc-date-inp" value="${t.dueDate||''}" title="Due date"
+      onchange="inlineSave('${t.id}','dueDate',this.value||null);updateTaskChips('${t.id}',tasks.find(x=>x.id==='${t.id}'))">
+    <!-- Recurrence -->
+    <button class="qc-btn ${t.recur&&t.recur!=='none'?'active-recur':''}"
+      onclick="cycleQcRecur('${t.id}',this)" title="Powtarzanie">
+      ↻ ${t.recur&&t.recur!=='none'?{daily:'codziennie',weekdays:'dni rob.',weekly:'co tydz.',monthly:'co mies.'}[t.recur]:'Recurrence'}
+    </button>
+    <!-- Waiting -->
+    <button class="qc-btn ${t.status==='waiting'?'active-wait':''}"
+      onclick="cycleQcWaiting('${t.id}',this)" title="Status">
+      ${t.status==='waiting'?'⏳ Czekam':'⏳ Czekam?'}
+    </button>
   </div>
 
   <div class="task-detail" id="det-${t.id}">
@@ -1213,6 +1242,72 @@ function taskHTML(t, showAdd) {
     </div>
   </div>
 </div>`;
+}
+
+/* ═══════════════════════════════════════════
+   QUICK CONTROLS
+═══════════════════════════════════════════ */
+function cycleQcPrio(tid, btn) {
+  const t = tasks.find(t=>t.id===tid);
+  if (!t) return;
+  const u = t.urgency||1, i = t.importance||1;
+  // cycle: none → pilne+ważne → ważne → pilne → none
+  let nu,ni;
+  if (u>=2&&i>=2)      { nu=1; ni=3; }  // → ważne
+  else if (i>=2&&u<2)  { nu=3; ni=1; }  // → pilne
+  else if (u>=2&&i<2)  { nu=1; ni=1; }  // → brak
+  else                 { nu=3; ni=3; }  // → pilne+ważne
+  t.urgency=nu; t.importance=ni; t.updatedAt=Date.now();
+  save(); scheduleAutoSync();
+  // update btn
+  const labels = {q1:'Pilne+ważne',q2:'Ważne',q3:'Pilne',q4:'Priorytet'};
+  const colors = {q1:'#c04040',q2:'#5e8e5e',q3:'#b8881a',q4:'var(--bd2)'};
+  const cls = nu>=2&&ni>=2?'q1':ni>=2?'q2':nu>=2?'q3':'q4';
+  btn.className = 'qc-btn' + (cls!=='q4'?' active-prio'+cls.slice(1):'');
+  btn.innerHTML = `<span class="prio-dot" style="background:${colors[cls]}"></span>${labels[cls]}`;
+  // sync inline prio row if open
+  inlinePrio(tid, nu, ni, null);
+}
+
+const RECUR_CYCLE = ['none','daily','weekdays','weekly','monthly'];
+const RECUR_LABELS = {none:'Recurrence',daily:'codziennie',weekdays:'dni rob.',weekly:'co tydz.',monthly:'co mies.'};
+function cycleQcRecur(tid, btn) {
+  const t = tasks.find(t=>t.id===tid);
+  if (!t) return;
+  const cur = t.recur||'none';
+  const idx = RECUR_CYCLE.indexOf(cur);
+  const next = RECUR_CYCLE[(idx+1)%RECUR_CYCLE.length];
+  t.recur=next; t.updatedAt=Date.now();
+  save(); scheduleAutoSync();
+  btn.className = 'qc-btn'+(next!=='none'?' active-recur':'');
+  btn.textContent = '↻ '+RECUR_LABELS[next];
+  // update chip
+  const chipEl = document.querySelector('#tc-'+tid+' .chip-recur');
+  if (next!=='none') {
+    const fullLabels={daily:'codziennie',weekdays:'dni robocze',weekly:'co tydzień',monthly:'co miesiąc'};
+    if (chipEl) { chipEl.textContent='↻ '+fullLabels[next]; }
+    else {
+      const chips=document.querySelector('#tc-'+tid+' .task-chips');
+      if(chips){const s=document.createElement('span');s.className='chip chip-recur';s.textContent='↻ '+fullLabels[next];chips.appendChild(s);}
+    }
+  } else if (chipEl) chipEl.remove();
+}
+
+function cycleQcWaiting(tid, btn) {
+  const t = tasks.find(t=>t.id===tid);
+  if (!t) return;
+  if (t.status==='waiting') {
+    // unlock
+    t.status='todo'; t.waitingFor=null; t.dayAssigned=null;
+    btn.className='qc-btn'; btn.textContent='⏳ Czekam?';
+  } else {
+    // mark as waiting — ask who
+    const who = prompt('Na kogo / co czekasz?','');
+    if (who===null) return; // cancelled
+    t.status='waiting'; t.waitingFor=who||null;
+    btn.className='qc-btn active-wait'; btn.textContent='⏳ Czekam';
+  }
+  t.updatedAt=Date.now(); save(); scheduleAutoSync(); renderAll2();
 }
 
 /* ═══════════════════════════════════════════
@@ -1433,7 +1528,7 @@ function switchDtab(tid, tab, btn) {
 }
 
 function toggleExpand(id, e) {
-  if (e.target.closest('.check-circle,.add-sub-row,.sub-check,.sub-del,.add-sub-btn,.sub-date-inp,.note-area,.note-save-btn,.dtab,.show-link-form-btn,.add-link-form,.link-open,.link-del,.btn-add-link,.btn-cancel-lf,.tact-btn,.task-expand-btn,.edit-inline-btn,.task-card-actions')) return;
+  if (e.target.closest('.check-circle,.add-sub-row,.sub-check,.sub-del,.add-sub-btn,.sub-date-inp,.note-area,.note-save-btn,.dtab,.show-link-form-btn,.add-link-form,.link-open,.link-del,.btn-add-link,.btn-cancel-lf,.tact-btn,.task-expand-btn,.task-card-actions,.quick-controls')) return;
   const det = document.getElementById('det-'+id);
   const btn = document.getElementById('exp-'+id);
   const open = !det.classList.contains('open');
@@ -1721,11 +1816,7 @@ function addClient() {
   clients.push(val); saveCl(); inp.value = ''; renderClients(); renderAll();
 }
 function setMax(n) { maxDay = n; localStorage.setItem(MK, n); renderSettings(); }
-function saveGsUrl() {
-  gsUrl = document.getElementById('gs-url').value.trim();
-  localStorage.setItem(GK, gsUrl);
-  setSyncStatus('URL zapisany.', 'ok');
-}
+
 function weeklyReview() {
   tasks.forEach(t => { if (!t.done) t.dayAssigned = null; });
   save(); renderAll2(); alert('Weekly review gotowy — backlog odświeżony.');
@@ -2212,7 +2303,7 @@ function bulletToTask(cl, text, ni) {
 }
 
 function renderSettings() {
-  document.getElementById('gs-url').value = gsUrl;
+
   document.getElementById('max3').className = 'toggle-btn' + (maxDay===3 ? ' sel-e' : '');
   document.getElementById('max5').className = 'toggle-btn' + (maxDay===5 ? ' sel-e' : '');
 }
