@@ -184,6 +184,28 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
 .toggle-btn.sel-i{background:var(--sage-l);border-color:var(--sage);color:var(--sage-d)}
 .toggle-btn.sel-e{background:var(--teal-l);border-color:var(--teal);color:var(--teal)}
 .ql{font-size:12px;color:var(--sage);cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.mode-toggle{display:flex;gap:0;background:var(--bg2);border-radius:20px;padding:3px;margin:10px 16px 0;border:.5px solid var(--bd)}
+.mode-btn{flex:1;padding:7px 0;border:none;background:transparent;border-radius:17px;font-size:13px;font-weight:500;color:var(--text2);cursor:pointer;transition:all .2s;text-align:center}
+.mode-btn.active-work{background:var(--sage);color:white;box-shadow:0 1px 4px rgba(107,148,120,.35)}
+.mode-btn.active-private{background:var(--mauve);color:white;box-shadow:0 1px 4px rgba(138,107,126,.35)}
+.inline-field{width:100%;padding:6px 8px;border:.5px solid var(--bd2);border-radius:8px;background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;margin-bottom:6px}
+.inline-field:focus{outline:none;border-color:var(--sage)}
+.inline-select{width:100%;padding:6px 8px;border:.5px solid var(--bd2);border-radius:8px;background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;margin-bottom:6px;cursor:pointer}
+.inline-section{padding:10px 0;border-bottom:.5px solid var(--bd)}
+.inline-section:last-child{border-bottom:none}
+.inline-label{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;display:block}
+.inline-prio-row{display:flex;gap:4px;margin-bottom:6px}
+.inline-prio-btn{flex:1;padding:5px 2px;border:.5px solid var(--bd);border-radius:7px;background:var(--bg2);font-size:11px;font-weight:500;cursor:pointer;text-align:center;color:var(--text2);transition:all .15s}
+.inline-prio-btn.sel-q1{background:var(--rose-l);border-color:var(--rose);color:var(--rose)}
+.inline-prio-btn.sel-q2{background:var(--sage-l);border-color:var(--sage);color:var(--sage-d)}
+.inline-prio-btn.sel-q3{background:var(--amber-l);border-color:var(--amber);color:var(--amber)}
+.inline-prio-btn.sel-q4{background:var(--bg2);border-color:var(--bd2);color:var(--text2)}
+.inline-date-row{display:flex;gap:4px;margin-bottom:6px}
+.inline-qd{flex:1;padding:5px 2px;border:.5px solid var(--bd);border-radius:7px;background:var(--bg2);font-size:11px;cursor:pointer;text-align:center;color:var(--text2);transition:all .15s}
+.inline-qd.active{background:var(--sage-l);border-color:var(--sage);color:var(--sage-d)}
+.inline-recur-row{display:flex;gap:3px;flex-wrap:wrap;margin-bottom:6px}
+.inline-recur-btn{padding:4px 8px;border:.5px solid var(--bd);border-radius:7px;background:var(--bg2);font-size:11px;cursor:pointer;color:var(--text2);transition:all .15s}
+.inline-recur-btn.active{background:var(--lavender-l);border-color:var(--lavender);color:var(--lavender)}
 .prio-row{display:flex;gap:6px;margin-bottom:13px}
 .prio-btn{flex:1;padding:9px 4px;border:.5px solid var(--bd);border-radius:10px;background:var(--bg2);font-size:12px;font-weight:500;cursor:pointer;text-align:center;transition:all .15s;color:var(--text2);line-height:1.3}
 .prio-btn .prio-label{display:block;font-size:10px;color:var(--text3);margin-top:2px;font-weight:400}
@@ -296,6 +318,12 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
     <button class="settings-btn" onclick="switchTab('settings',null)" title="Ustawienia">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06-.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
+  </div>
+
+  <!-- MODE TOGGLE -->
+  <div class="mode-toggle">
+    <button class="mode-btn active-work" id="mode-work" onclick="setMode('work',this)">💼 Praca</button>
+    <button class="mode-btn" id="mode-private" onclick="setMode('private',this)">🏠 Prywatne</button>
   </div>
 
   <!-- HERO CANVAS -->
@@ -518,6 +546,7 @@ let maxDay       = parseInt(localStorage.getItem(MK) || '5');
 
 let editId = null, detailsOpen = false;
 let doneExpanded = false;
+let appMode = 'work'; // 'work' | 'private'
 let fU = 1, fI = 1, fE = 'low', fStatus = 'todo', fRecur = 'none', fDateType = 'deadline';
 let allFilter = 'all';
 
@@ -766,11 +795,13 @@ function updateHeroProgress() {
   const total = dayTasks.length;
   const pct   = total ? Math.round(done/total*100) : 0;
   document.getElementById('hero-prog-fill').style.width = pct + '%';
+  document.getElementById('hero-prog-fill').style.background = appMode==='private' ? 'rgba(255,255,255,.9)' : 'white';
   document.getElementById('hero-frac').textContent = done + '/' + total;
   const hint = document.getElementById('hero-hint');
-  if (pct === 100 && total > 0) hint.textContent = 'Dzień ukończony! ✓';
-  else if (pct > 0) hint.textContent = pct + '% gotowe';
-  else hint.textContent = total > 0 ? 'Zacznij dzień!' : '';
+  const modeLabel = appMode === 'private' ? '🏠 ' : '💼 ';
+  if (pct === 100 && total > 0) hint.textContent = modeLabel + 'Dzień ukończony! ✓';
+  else if (pct > 0) hint.textContent = modeLabel + pct + '% gotowe';
+  else hint.textContent = modeLabel + (total > 0 ? 'Zacznij dzień!' : 'Brak zadań');
   // total planned time
   const pendingTasks = dayTasks.filter(t => !t.done && t.estTime);
   const totalMin = pendingTasks.reduce((s,t) => s + (t.estTime||0), 0);
@@ -941,8 +972,11 @@ function subProg(t) {
 function getDayList() {
   const today = td();
   // pending: deadline tasks (date<=today or no date) + scheduled tasks (exact today)
+  // filtered by current mode (work vs private)
   const pending = tasks.filter(t => {
     if (t.done || t.status === 'waiting') return false;
+    if (appMode === 'work'    && t.client === 'Prywatne') return false;
+    if (appMode === 'private' && t.client !== 'Prywatne') return false;
     const edd = effectiveDueDate(t);
     if (t.dateType === 'scheduled') return edd === today;
     return !edd || edd <= today;
@@ -952,6 +986,8 @@ function getDayList() {
   // already assigned today (and still eligible)
   const isEligible = t => {
     if (t.done || t.status==='waiting') return false;
+    if (appMode==='work'    && t.client==='Prywatne') return false;
+    if (appMode==='private' && t.client!=='Prywatne') return false;
     const edd = effectiveDueDate(t);
     if (t.dateType==='scheduled') return edd===today;
     return !edd || edd<=today;
@@ -1049,7 +1085,8 @@ function taskHTML(t, showAdd) {
   <div class="task-detail" id="det-${t.id}">
     <div class="detail-tabs">
       <button class="dtab active" onclick="switchDtab('${t.id}','subs',this)">Podzadania</button>
-      <button class="dtab" onclick="switchDtab('${t.id}','more',this)">Notatka ${hasNote?'·':''} ${hasLinks?t.links.length+' link'+(t.links.length>1?'i':''):''}${!hasNote&&!hasLinks?'i linki':''}</button>
+      <button class="dtab" onclick="switchDtab('${t.id}','more',this)">Notatka${hasNote||hasLinks?' ·':''}</button>
+      <button class="dtab" onclick="switchDtab('${t.id}','edit',this)">Szczegóły</button>
     </div>
 
     <div class="dtab-content active" id="dt-subs-${t.id}">
@@ -1112,12 +1149,202 @@ function taskHTML(t, showAdd) {
       </div>
     </div>
 
+    <div class="dtab-content" id="dt-edit-${t.id}">
+      <div class="inline-section">
+        <span class="inline-label">Nazwa</span>
+        <input class="inline-field" value="${t.name.replace(/"/g,'&quot;')}" onblur="inlineSave('${t.id}','name',this.value)" onkeydown="if(event.key==='Enter')this.blur()">
+      </div>
+      <div class="inline-section">
+        <span class="inline-label">Klient</span>
+        <select class="inline-select" onchange="inlineSave('${t.id}','client',this.value)">
+          ${clients.map(cl=>`<option value="${cl}" ${cl===t.client?'selected':''}>${cl}</option>`).join('')}
+        </select>
+      </div>
+      <div class="inline-section">
+        <span class="inline-label">Priorytet</span>
+        <div class="inline-prio-row" id="iprio-${t.id}">
+          <button class="inline-prio-btn ${ (t.urgency||1)>=2&&(t.importance||1)>=2 ? 'sel-q1':''}" onclick="inlinePrio('${t.id}',3,3,this)"><span class="prio-dot" style="background:#c04040"></span>Pilne+ważne</button>
+          <button class="inline-prio-btn ${ (t.importance||1)>=2&&!((t.urgency||1)>=2) ? 'sel-q2':''}" onclick="inlinePrio('${t.id}',1,3,this)"><span class="prio-dot" style="background:#5e8e5e"></span>Ważne</button>
+          <button class="inline-prio-btn ${ (t.urgency||1)>=2&&!((t.importance||1)>=2) ? 'sel-q3':''}" onclick="inlinePrio('${t.id}',3,1,this)"><span class="prio-dot" style="background:#b8881a"></span>Pilne</button>
+          <button class="inline-prio-btn ${ !((t.urgency||1)>=2)&&!((t.importance||1)>=2) ? 'sel-q4':''}" onclick="inlinePrio('${t.id}',1,1,this)"><span class="prio-dot" style="background:var(--bd2)"></span>Brak</button>
+        </div>
+      </div>
+      <div class="inline-section">
+        <span class="inline-label">Data</span>
+        <div class="inline-date-row" id="idate-${t.id}">
+          <button class="inline-qd" onclick="inlineDate('${t.id}','today',this)">Dziś</button>
+          <button class="inline-qd" onclick="inlineDate('${t.id}','tomorrow',this)">Jutro</button>
+          <button class="inline-qd" onclick="inlineDate('${t.id}','week',this)">Za tydzień</button>
+          <button class="inline-qd" onclick="inlineDate('${t.id}','none',this)">Brak</button>
+        </div>
+        <input type="date" class="inline-field" id="idate-inp-${t.id}" value="${t.dueDate||''}"
+          onchange="inlineSave('${t.id}','dueDate',this.value||null);syncInlineDateBtns('${t.id}',this.value)">
+      </div>
+      <div class="inline-section">
+        <span class="inline-label">Est. czas (min)</span>
+        <input type="number" class="inline-field" value="${t.estTime||''}" placeholder="30" min="1"
+          onblur="inlineSave('${t.id}','estTime',this.value?parseInt(this.value):null)">
+      </div>
+      <div class="inline-section">
+        <span class="inline-label">Powtarzanie</span>
+        <div class="inline-recur-row">
+          ${['none','daily','weekdays','weekly','monthly'].map((r,ri)=>`<button class="inline-recur-btn ${(t.recur||'none')===r?'active':''}" onclick="inlineRecur('${t.id}','${r}',this)">${['Brak','Codziennie','Dni robocze','Co tydzień','Co miesiąc'][ri]}</button>`).join('')}
+        </div>
+      </div>
+    </div>
+
     <div class="task-actions-row">
       ${showAdd ? `<button class="tact-btn primary" onclick="addToDay('${t.id}')">+ Do dnia</button>` : ''}
       <button class="tact-btn danger" onclick="deleteTask('${t.id}')">Usuń zadanie</button>
     </div>
   </div>
 </div>`;
+}
+
+/* ═══════════════════════════════════════════
+   INLINE EDITING
+═══════════════════════════════════════════ */
+function inlineSave(tid, field, value) {
+  const t = tasks.find(t=>t.id===tid);
+  if (!t) return;
+  t[field] = value;
+  t.updatedAt = Date.now();
+  save(); scheduleAutoSync();
+  // update visible chips on card surgically
+  if (field==='name') {
+    const nameEl = document.querySelector('#tc-'+tid+' .task-name');
+    if (nameEl) nameEl.textContent = value;
+  } else if (field==='client') {
+    const chipEl = document.querySelector('#tc-'+tid+' .chip-client');
+    if (chipEl) chipEl.textContent = value;
+    const color = CL_COLORS[clients.indexOf(value) % CL_COLORS.length] || '#6b9478';
+    if (chipEl) { chipEl.style.background=color+'18'; chipEl.style.color=color; chipEl.style.borderColor=color+'40'; }
+  } else if (field==='dueDate') {
+    // let effectiveDueDate recompute — small re-render of chips only
+    updateTaskChips(tid, t);
+  } else if (field==='estTime') {
+    updateTaskChips(tid, t);
+  }
+}
+
+function updateTaskChips(tid, t) {
+  const chipsEl = document.querySelector('#tc-'+tid+' .task-chips');
+  if (!chipsEl) return;
+  const eff = effectiveDueDate(t);
+  const today = td();
+  const isOverdue = eff && eff < today;
+  const isQuick = (t.estTime||999) < 10;
+  // update time chip
+  let timeChip = chipsEl.querySelector('.chip-time, .chip-quick');
+  if (isQuick) {
+    if (!timeChip || !timeChip.classList.contains('chip-quick')) {
+      if (timeChip) timeChip.remove();
+      timeChip = document.createElement('span');
+      timeChip.className = 'chip chip-quick';
+      chipsEl.insertBefore(timeChip, chipsEl.children[1]);
+    }
+    timeChip.textContent = '<10min';
+  } else if (t.estTime) {
+    if (!timeChip || timeChip.classList.contains('chip-quick')) {
+      if (timeChip) timeChip.remove();
+      timeChip = document.createElement('span');
+      timeChip.className = 'chip chip-time';
+      chipsEl.insertBefore(timeChip, chipsEl.children[1]);
+    }
+    timeChip.textContent = fmtTime(t.estTime);
+  } else if (timeChip) timeChip.remove();
+  // update due chip
+  let dueChip = chipsEl.querySelector('.chip-due, .chip-overdue, .chip-scheduled');
+  if (eff) {
+    if (!dueChip) { dueChip = document.createElement('span'); chipsEl.appendChild(dueChip); }
+    dueChip.className = 'chip ' + (isOverdue ? 'chip-overdue' : t.dateType==='scheduled' ? 'chip-scheduled' : 'chip-due');
+    dueChip.textContent = (isOverdue?'! ':'') + eff + (!t.dueDate?' *':'');
+  } else if (dueChip) dueChip.remove();
+}
+
+function inlinePrio(tid, u, i, btn) {
+  const t = tasks.find(t=>t.id===tid);
+  if (!t) return;
+  t.urgency = u; t.importance = i; t.updatedAt = Date.now();
+  save(); scheduleAutoSync();
+  // update inline buttons
+  const row = document.getElementById('iprio-'+tid);
+  if (row) {
+    const btns = row.querySelectorAll('.inline-prio-btn');
+    btns.forEach(b => b.className = 'inline-prio-btn');
+    const classes = ['sel-q1','sel-q2','sel-q3','sel-q4'];
+    const active = u>=2&&i>=2?0 : i>=2?1 : u>=2?2 : 3;
+    btns[active]?.classList.add(classes[active]);
+  }
+  // update quadrant chip on card
+  const [qc,ql] = qChip(t);
+  const hasNonDefault = u>=2 || i>=2;
+  const card = document.querySelector('#tc-'+tid+' .task-chips');
+  if (card) {
+    let qChipEl = card.querySelector('.chip-q1,.chip-q2,.chip-q3,.chip-q4');
+    if (hasNonDefault) {
+      if (!qChipEl) { qChipEl = document.createElement('span'); card.appendChild(qChipEl); }
+      qChipEl.className = 'chip '+qc; qChipEl.textContent = ql;
+    } else if (qChipEl) qChipEl.remove();
+  }
+}
+
+function inlineDate(tid, which, btn) {
+  const t = tasks.find(t=>t.id===tid);
+  if (!t) return;
+  const d = new Date();
+  if (which==='today')         t.dueDate = d.toISOString().split('T')[0];
+  else if (which==='tomorrow') { d.setDate(d.getDate()+1); t.dueDate = d.toISOString().split('T')[0]; }
+  else if (which==='week')     { d.setDate(d.getDate()+7); t.dueDate = d.toISOString().split('T')[0]; }
+  else                         t.dueDate = null;
+  t.updatedAt = Date.now();
+  // if future, remove from dayAssigned
+  if (t.dueDate && t.dueDate > td()) t.dayAssigned = null;
+  save(); scheduleAutoSync();
+  // update date input
+  const inp = document.getElementById('idate-inp-'+tid);
+  if (inp) inp.value = t.dueDate || '';
+  syncInlineDateBtns(tid, t.dueDate||'');
+  updateTaskChips(tid, t);
+}
+
+function syncInlineDateBtns(tid, val) {
+  const row = document.getElementById('idate-'+tid);
+  if (!row) return;
+  const today = td();
+  const tomorrow = new Date(Date.now()+86400000).toISOString().split('T')[0];
+  const week    = new Date(Date.now()+7*86400000).toISOString().split('T')[0];
+  const btns = row.querySelectorAll('.inline-qd');
+  const actives = [val===today, val===tomorrow, val===week, !val];
+  btns.forEach((b,i) => b.classList.toggle('active', actives[i]||false));
+}
+
+function inlineRecur(tid, val, btn) {
+  const t = tasks.find(t=>t.id===tid);
+  if (!t) return;
+  t.recur = val; t.updatedAt = Date.now();
+  save(); scheduleAutoSync();
+  btn.closest('.inline-recur-row').querySelectorAll('.inline-recur-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  // update chip on card
+  const card = document.querySelector('#tc-'+tid+' .task-chips');
+  if (card) {
+    let recurChip = card.querySelector('.chip-recur');
+    if (val && val!=='none') {
+      if (!recurChip) { recurChip = document.createElement('span'); recurChip.className='chip chip-recur'; card.appendChild(recurChip); }
+      const labels = {daily:'codziennie',weekdays:'dni robocze',weekly:'co tydzień',monthly:'co miesiąc'};
+      recurChip.textContent = '↻ '+labels[val];
+    } else if (recurChip) recurChip.remove();
+  }
+}
+
+function inlineStatus(tid, val, btn) {
+  const t = tasks.find(t=>t.id===tid);
+  if (!t) return;
+  t.status = val;
+  if (val==='todo') t.waitingFor = null;
+  t.updatedAt = Date.now();
+  save(); scheduleAutoSync(); renderAll2();
 }
 
 /* ═══════════════════════════════════════════
@@ -1179,11 +1406,16 @@ function swipeDel(tid) {
    INTERACTIONS
 ═══════════════════════════════════════════ */
 function switchDtab(tid, tab, btn) {
-  ['subs','more'].forEach(t => {
+  ['subs','more','edit'].forEach(t => {
     document.getElementById('dt-'+t+'-'+tid)?.classList.toggle('active', t===tab);
   });
   btn.closest('.detail-tabs').querySelectorAll('.dtab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
+  // sync date buttons when opening edit tab
+  if (tab==='edit') {
+    const t = tasks.find(t=>t.id===tid);
+    if (t) syncInlineDateBtns(tid, t.dueDate||'');
+  }
 }
 
 function toggleExpand(id, e) {
@@ -1629,6 +1861,11 @@ function openModal(id=null) {
   document.getElementById('save-btn').textContent    = id ? 'Zapisz zmiany'  : 'Dodaj zadanie';
   const sel = document.getElementById('f-client');
   sel.innerHTML = clients.map(c => `<option value="${c}">${c}</option>`).join('');
+  // default client based on mode
+  if (!id) {
+    if (appMode === 'private') sel.value = 'Prywatne';
+    else { const firstWork = clients.find(c => c !== 'Prywatne'); if (firstWork) sel.value = firstWork; }
+  }
 
   if (id) {
     const t = tasks.find(t => t.id === id);
@@ -1747,6 +1984,22 @@ function importJSON(input) {
   input.value = '';
 }
 
+function setMode(mode, btn) {
+  appMode = mode;
+  document.getElementById('mode-work').className    = 'mode-btn' + (mode==='work'?'    active-work':'');
+  document.getElementById('mode-private').className = 'mode-btn' + (mode==='private'?' active-private':'');
+  // update FAB color
+  const fab = document.querySelector('.fab');
+  if (fab) fab.style.background = mode==='private' ? 'var(--mauve)' : 'var(--sage)';
+  // update hero accent
+  document.getElementById('hero-prog-fill').style.background = mode==='private' ? 'white' : 'white';
+  renderAll2();
+}
+
+function isWorkTask(t) {
+  return t.client !== 'Prywatne';
+}
+
 function toggleDoneSection() {
   doneExpanded = !doneExpanded;
   const section = document.getElementById('done-section');
@@ -1793,6 +2046,9 @@ function renderToday() {
 
 function renderAll() {
   let filtered = allFilter==='all' ? tasks : tasks.filter(t => t.client===allFilter);
+  // filter by mode
+  if (appMode==='work')    filtered = filtered.filter(t => t.client!=='Prywatne');
+  if (appMode==='private') filtered = filtered.filter(t => t.client==='Prywatne');
   filtered = [...filtered].sort((a,b) => (a.done?1:0)-(b.done?1:0) || taskScore(b)-taskScore(a));
   document.getElementById('all-filter').innerHTML = ['all',...clients].map(cl => {
     const noteCount = cl === 'all' ? 0 : (clientNotes[cl]||[]).length;
@@ -1973,13 +2229,23 @@ function renderPlans() {
   }
   // Future tasks (due date in future)
   const future = tasks
-    .filter(t => !t.done && t.status !== 'waiting' && t.dueDate && t.dueDate > today)
+    .filter(t => {
+      if (t.done || t.status==='waiting' || !t.dueDate || t.dueDate<=today) return false;
+      if (appMode==='work'    && t.client==='Prywatne') return false;
+      if (appMode==='private' && t.client!=='Prywatne') return false;
+      return true;
+    })
     .sort((a,b) => a.dueDate.localeCompare(b.dueDate));
   // mark scheduled vs deadline in plans
   const scheduledFuture = future.filter(t => t.dateType==='scheduled');
   const deadlineFuture  = future.filter(t => t.dateType!=='scheduled');
   // Blocked tasks (waiting)
-  const waiting = tasks.filter(t => !t.done && t.status === 'waiting');
+  const waiting = tasks.filter(t => {
+    if (t.done || t.status!=='waiting') return false;
+    if (appMode==='work'    && t.client==='Prywatne') return false;
+    if (appMode==='private' && t.client!=='Prywatne') return false;
+    return true;
+  });
 
   let html = '';
 
@@ -2297,7 +2563,7 @@ function restoreOpenDetails(openList) {
       det.classList.add('open');
       if (btn) btn.classList.add('open');
       // restore active tab
-      ['subs','more'].forEach(t => {
+      ['subs','more','edit'].forEach(t => {
         document.getElementById('dt-'+t+'-'+tid)?.classList.toggle('active', t===activeTab);
       });
       det.querySelectorAll('.dtab').forEach(b => {
