@@ -971,38 +971,50 @@ function subProg(t) {
 
 function getDayList() {
   const today = td();
-  // pending: deadline tasks (date<=today or no date) + scheduled tasks (exact today)
-  // filtered by current mode (work vs private)
-  const pending = tasks.filter(t => {
-    if (t.done || t.status === 'waiting') return false;
-    if (appMode === 'work'    && t.client === 'Prywatne') return false;
-    if (appMode === 'private' && t.client !== 'Prywatne') return false;
-    const edd = effectiveDueDate(t);
-    if (t.dateType === 'scheduled') return edd === today;
-    return !edd || edd <= today;
-  });
-  const sorted = [...pending].sort((a,b) => taskScore(b) - taskScore(a));
 
-  // already assigned today (and still eligible)
-  const isEligible = t => {
-    if (t.done || t.status==='waiting') return false;
+  // mode filter helper
+  const modeOk = t => {
     if (appMode==='work'    && t.client==='Prywatne') return false;
     if (appMode==='private' && t.client!=='Prywatne') return false;
+    return true;
+  };
+
+  // ELIGIBLE for today's list: scheduled=exact day, deadline=date<=today or no date
+  const isEligible = t => {
+    if (t.done || t.status==='waiting') return false;
+    if (!modeOk(t)) return false;
     const edd = effectiveDueDate(t);
     if (t.dateType==='scheduled') return edd===today;
     return !edd || edd<=today;
   };
+
+  // AVAILABLE for "następne w kolejce": deadline tasks with future date OR no date
+  // (scheduled with future date stays in Plans only)
+  const isAvailable = t => {
+    if (t.done || t.status==='waiting') return false;
+    if (!modeOk(t)) return false;
+    if (t.dateType==='scheduled') return false; // never pull scheduled early
+    return true; // deadline tasks with any date (or none) can fill the queue
+  };
+
+  // Build today's assigned list (only eligible)
   const aIds    = new Set(tasks.filter(t => t.dayAssigned===today && isEligible(t)).map(t=>t.id));
   const dayList = tasks.filter(t => t.dayAssigned===today && isEligible(t));
 
-  // auto-fill up to maxDay
-  for (const t of sorted) {
+  // Auto-fill from eligible pool first
+  const eligibleSorted = tasks.filter(t => isEligible(t) && !aIds.has(t.id))
+    .sort((a,b) => taskScore(b)-taskScore(a));
+  for (const t of eligibleSorted) {
     if (dayList.length >= maxDay) break;
-    if (!aIds.has(t.id)) { t.dayAssigned = today; dayList.push(t); aIds.add(t.id); }
+    t.dayAssigned = today; dayList.push(t); aIds.add(t.id);
   }
   save();
 
-  const remaining = sorted.filter(t => !aIds.has(t.id));
+  // "następne w kolejce" = available tasks not yet assigned (includes future deadlines)
+  const remaining = tasks
+    .filter(t => isAvailable(t) && !aIds.has(t.id))
+    .sort((a,b) => taskScore(b)-taskScore(a));
+
   return { dayList, remaining };
 }
 
