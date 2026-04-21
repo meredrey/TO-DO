@@ -2619,6 +2619,18 @@ function initDate() {
 
 window.addEventListener('resize', () => { initCanvas(); });
 initDate();
+// normalize any bad date formats in localStorage (from Sheets sync)
+tasks = tasks.map(t => {
+  ['dueDate','dayAssigned'].forEach(f => {
+    if (t[f] && typeof t[f]==='string' && t[f].length > 10) t[f] = t[f].slice(0,10);
+  });
+  if (t.subtasks) t.subtasks = t.subtasks.map(s => {
+    if (s.dueDate && typeof s.dueDate==='string' && s.dueDate.length>10) s.dueDate = s.dueDate.slice(0,10);
+    return s;
+  });
+  return t;
+});
+save();
 renderAll2();
 requestAnimationFrame(() => requestAnimationFrame(initCanvas));
 
@@ -2638,7 +2650,13 @@ async function autoSyncOnStart() {
 
     if (remoteNewest > localNewest && (data.tasks||[]).length > 0) {
       // Sheets is newer — pull
-      tasks = data.tasks;
+      tasks = data.tasks.map(t => {
+        // normalize any ISO dates to yyyy-MM-dd
+        ['dueDate','dayAssigned'].forEach(f => {
+          if (t[f] && typeof t[f]==='string' && t[f].length>10) t[f]=t[f].slice(0,10);
+        });
+        return t;
+      });
       save();
       if (Array.isArray(data.clients) && data.clients.length > 0) {
         clients = data.clients;
