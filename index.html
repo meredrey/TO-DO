@@ -2620,8 +2620,42 @@ function initDate() {
 window.addEventListener('resize', () => { initCanvas(); });
 initDate();
 renderAll2();
-// wait for layout before canvas init
 requestAnimationFrame(() => requestAnimationFrame(initCanvas));
+
+// ── AUTO SYNC ON START ──────────────────────────────────
+// On load: pull from Sheets if URL set and Sheets has newer data
+async function autoSyncOnStart() {
+  if (!gsUrl) return;
+  try {
+    const resp = await fetch(gsUrl + '?action=getAll');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (data.error) return;
+
+    // compare: use updatedAt of newest task to decide which is fresher
+    const remoteNewest = (data.tasks||[]).reduce((max,t) => Math.max(max, t.updatedAt||0), 0);
+    const localNewest  = tasks.reduce((max,t) => Math.max(max, t.updatedAt||0), 0);
+
+    if (remoteNewest > localNewest && (data.tasks||[]).length > 0) {
+      // Sheets is newer — pull
+      tasks = data.tasks;
+      save();
+      if (Array.isArray(data.clients) && data.clients.length > 0) {
+        clients = data.clients;
+        saveCl();
+      }
+      renderAll2();
+      syncTiles(); scheduleRender();
+      setSyncStatus('✓ Zaktualizowano z Sheets · ' + new Date().toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit'}), 'ok');
+    } else if (localNewest > 0 && localNewest >= remoteNewest) {
+      // local is newer or equal — push to Sheets silently
+      scheduleAutoSync();
+    }
+  } catch(e) { /* silent — offline or script unavailable */ }
+}
+
+// Run after a short delay to not block initial render
+setTimeout(autoSyncOnStart, 1500);
 </script>
 
 </body>
