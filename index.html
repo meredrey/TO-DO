@@ -1134,6 +1134,14 @@ function taskHTML(t, showAdd) {
   <div id="qcp-${t.id}" class="qc-popover" style="display:none" onclick="event.stopPropagation()"></div>
 
   <div class="task-detail" id="det-${t.id}">
+    <div style="margin-bottom:10px">
+      <input class="inline-field" id="det-name-${t.id}"
+        data-tid="${t.id}"
+        style="font-size:14px;font-weight:500;width:100%"
+        onblur="inlineSave(this.dataset.tid,'name',this.value)"
+        onkeydown="if(event.key==='Enter')this.blur()"
+        onfocus="this.select()">
+    </div>
     <div class="detail-tabs">
       <button class="dtab active" onclick="switchDtab('${t.id}','subs',this)">Podzadania</button>
       <button class="dtab" onclick="switchDtab('${t.id}','more',this)">Notatka${hasNote||hasLinks?' ·':''}</button>
@@ -1719,6 +1727,12 @@ function toggleExpand(id, e) {
   const open = !det.classList.contains('open');
   det.classList.toggle('open', open);
   btn?.classList.toggle('open', open);
+  // set name field value (avoids HTML escaping issues)
+  if (open) {
+    const t = tasks.find(t=>t.id===id);
+    const inp = document.getElementById('det-name-'+id);
+    if (t && inp) inp.value = t.name;
+  }
 }
 
 function nextRecurDate(t) {
