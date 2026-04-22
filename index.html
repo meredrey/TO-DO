@@ -869,30 +869,36 @@ async function syncTask(task) {
   } catch(e) { /* silent */ }
 }
 
-// Full sync — POST no-cors, then verify via GET
+// Full sync — POST syncAll, verify count, retry if mismatch
 async function syncAll() {
-  if (!gsUrl) { setSyncStatus('Brak URL — ustaw Apps Script URL w ustawieniach.', 'err'); return; }
+  if (!gsUrl) return;
   clearTimeout(syncTimer);
   setSyncStatus('Synchronizuję…');
+  const send = async () => fetch(gsUrl, {
+    method: 'POST', mode: 'no-cors',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'syncAll', tasks, clients })
+  });
+  const verify = async () => {
+    const r = await fetch(gsUrl + '?action=getTasks');
+    const d = await r.json();
+    return Array.isArray(d) ? d.length : 0;
+  };
   try {
-    await fetch(gsUrl, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'syncAll', tasks, clients })
-    });
-    // verify after 2s via GET
-    await new Promise(r => setTimeout(r, 2000));
-    const resp = await fetch(gsUrl + '?action=getTasks');
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const d = await resp.json();
-    const count = Array.isArray(d) ? d.length : 0;
+    await send();
+    await new Promise(r => setTimeout(r, 2500));
+    let count = await verify();
+    // retry if Sheets has fewer tasks than local
+    if (count < tasks.length) {
+      setSyncStatus('Retry…');
+      await send();
+      await new Promise(r => setTimeout(r, 3000));
+      count = await verify();
+    }
     const ts = new Date().toLocaleTimeString('pl-PL', {hour:'2-digit',minute:'2-digit'});
-    if (count > 0) setSyncStatus('✓ ' + count + ' zadań · ' + ts, 'ok');
-    else setSyncStatus('Synchronizuję…');
+    setSyncStatus('✓ ' + count + ' zadań · ' + ts, count >= tasks.length ? 'ok' : 'err');
   } catch(e) {
     setSyncStatus('Błąd: ' + e.message, 'err');
-    console.error('syncAll:', e);
   }
 }
 
