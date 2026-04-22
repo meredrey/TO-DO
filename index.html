@@ -185,6 +185,19 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
 .toggle-btn.sel-e{background:var(--teal-l);border-color:var(--teal);color:var(--teal)}
 .ql{font-size:12px;color:var(--sage);cursor:pointer;text-decoration:underline;text-underline-offset:2px}
 .quick-controls{display:flex;flex-wrap:wrap;gap:5px;padding:8px 14px;border-top:.5px solid var(--bd);background:var(--bg2)}
+.qc-btn.qc-add{border-style:dashed;color:var(--text3);border-color:var(--bd)}
+.qc-btn.qc-add:hover{border-color:var(--mauve);color:var(--mauve)}
+.qc-popover{background:var(--bg);border:.5px solid var(--bd2);border-radius:12px;padding:10px;box-shadow:0 4px 16px rgba(0,0,0,.08);position:relative;z-index:10;margin:0 14px 8px}
+.qc-popover-title{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
+.qc-pop-row{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+.qc-pop-btn{padding:6px 11px;border:.5px solid var(--bd);border-radius:20px;background:var(--bg2);font-size:12px;font-weight:500;cursor:pointer;color:var(--text2);transition:all .15s;font-family:inherit}
+.qc-pop-btn.sel{background:var(--sage-l);border-color:var(--sage);color:var(--sage-d)}
+.qc-pop-btn.sel-p1{background:var(--rose-l);border-color:var(--rose);color:var(--rose)}
+.qc-pop-btn.sel-p2{background:var(--sage-l);border-color:var(--sage);color:var(--sage-d)}
+.qc-pop-btn.sel-p3{background:var(--amber-l);border-color:var(--amber);color:var(--amber)}
+.qc-pop-inp{width:100%;padding:7px 10px;border:.5px solid var(--bd2);border-radius:8px;background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;margin-top:4px}
+.qc-pop-inp:focus{outline:none;border-color:var(--sage)}
+.qc-pop-close{font-size:11px;color:var(--text3);cursor:pointer;text-align:right;display:block;margin-top:4px}
 .qc-btn{display:flex;align-items:center;gap:4px;padding:5px 9px;border:.5px solid var(--bd2);border-radius:20px;background:var(--bg);font-size:11px;font-weight:500;cursor:pointer;color:var(--text2);transition:all .15s;white-space:nowrap;font-family:inherit}
 .qc-btn:hover{border-color:var(--sage);color:var(--sage)}
 .qc-btn.active-prio1{background:var(--rose-l);border-color:var(--rose);color:var(--rose)}
@@ -1098,38 +1111,26 @@ function taskHTML(t, showAdd) {
     </div>
   </div>
 
-  <!-- QUICK CONTROLS — always visible -->
-  <div class="quick-controls" onclick="event.stopPropagation()">
-    <!-- Priority -->
-    <button class="qc-btn ${ (t.urgency||1)>=2&&(t.importance||1)>=2?'active-prio1':(t.importance||1)>=2?'active-prio2':(t.urgency||1)>=2?'active-prio3':'' }"
-      onclick="cycleQcPrio('${t.id}',this)" title="Priorytet">
-      <span class="prio-dot" style="background:${ (t.urgency||1)>=2&&(t.importance||1)>=2?'#c04040':(t.importance||1)>=2?'#5e8e5e':(t.urgency||1)>=2?'#b8881a':'var(--bd2)' }"></span>
-      ${ (t.urgency||1)>=2&&(t.importance||1)>=2?'Pilne+ważne':(t.importance||1)>=2?'Ważne':(t.urgency||1)>=2?'Pilne':'Priorytet' }
-    </button>
-    <!-- Client -->
-    <select class="qc-select" onchange="inlineSave('${t.id}','client',this.value)" title="Klient">
-      ${clients.map(cl=>`<option value="${cl}" ${cl===t.client?'selected':''}>${cl}</option>`).join('')}
-    </select>
-    <!-- Date -->
-    <input type="date" class="qc-date-inp" value="${t.dueDate||''}" title="Due date"
-      onchange="inlineSave('${t.id}','dueDate',this.value||null);updateTaskChips('${t.id}',tasks.find(x=>x.id==='${t.id}'))">
-    <!-- Recurrence -->
-    <button class="qc-btn ${t.recur&&t.recur!=='none'?'active-recur':''}"
-      onclick="cycleQcRecur('${t.id}',this)" title="Powtarzanie">
-      ↻ ${t.recur&&t.recur!=='none'?{daily:'codziennie',weekdays:'dni rob.',weekly:'co tydz.',monthly:'co mies.'}[t.recur]:'Recurrence'}
-    </button>
-    <!-- Waiting -->
-    <button class="qc-btn ${t.status==='waiting'?'active-wait':''}"
-      onclick="cycleQcWaiting('${t.id}',this)" title="Status">
-      ${t.status==='waiting'?'⏳ Czekam':'⏳ Czekam?'}
-    </button>
+  <!-- QUICK CONTROLS — only show set values + edit button -->
+  <div class="quick-controls" id="qc-${t.id}" onclick="event.stopPropagation()">
+    ${(()=>{
+      const u=t.urgency||1,im=t.importance||1,hasPrio=u>=2||im>=2;
+      const prioCls=u>=2&&im>=2?'active-prio1':im>=2?'active-prio2':'active-prio3';
+      const prioDot=u>=2&&im>=2?'#c04040':im>=2?'#5e8e5e':'#b8881a';
+      const prioLbl=u>=2&&im>=2?'Pilne+ważne':im>=2?'Ważne':'Pilne';
+      return hasPrio?`<button class="qc-btn ${prioCls}" onclick="openPrioPopover('${t.id}',this)"><span class="prio-dot" style="background:${prioDot}"></span>${prioLbl}</button>`:'';
+    })()}
+    ${t.dueDate?`<button class="qc-btn ${ (t.dateType||'deadline')==='scheduled'?'active-recur':'' }" onclick="openDatePopover('${t.id}',this)">${(t.dateType||'deadline')==='scheduled'?'📅':'⏰'} ${t.dueDate}</button>`:''}
+    ${t.recur&&t.recur!=='none'?`<button class="qc-btn active-recur" onclick="cycleQcRecur('${t.id}',this)">↻ ${{daily:'codziennie',weekdays:'dni rob.',weekly:'co tydz.',monthly:'co mies.'}[t.recur]}</button>`:''}
+    ${t.status==='waiting'?`<button class="qc-btn active-wait" onclick="openWaitingInline('${t.id}')">⏳ ${t.waitingFor?(t.waitingFor.length>18?t.waitingFor.slice(0,18)+'…':t.waitingFor):'Czekam'}</button>`:''}
+    <button class="qc-btn qc-add" onclick="openQcMenu('${t.id}',this)">+ Edytuj</button>
   </div>
+  <div id="qcp-${t.id}" class="qc-popover" style="display:none" onclick="event.stopPropagation()"></div>
 
   <div class="task-detail" id="det-${t.id}">
     <div class="detail-tabs">
       <button class="dtab active" onclick="switchDtab('${t.id}','subs',this)">Podzadania</button>
       <button class="dtab" onclick="switchDtab('${t.id}','more',this)">Notatka${hasNote||hasLinks?' ·':''}</button>
-      <button class="dtab" onclick="switchDtab('${t.id}','edit',this)">Szczegóły</button>
     </div>
 
     <div class="dtab-content active" id="dt-subs-${t.id}">
@@ -1192,50 +1193,6 @@ function taskHTML(t, showAdd) {
       </div>
     </div>
 
-    <div class="dtab-content" id="dt-edit-${t.id}">
-      <div class="inline-section">
-        <span class="inline-label">Nazwa</span>
-        <input class="inline-field" value="${t.name.replace(/"/g,'&quot;')}" onblur="inlineSave('${t.id}','name',this.value)" onkeydown="if(event.key==='Enter')this.blur()">
-      </div>
-      <div class="inline-section">
-        <span class="inline-label">Klient</span>
-        <select class="inline-select" onchange="inlineSave('${t.id}','client',this.value)">
-          ${clients.map(cl=>`<option value="${cl}" ${cl===t.client?'selected':''}>${cl}</option>`).join('')}
-        </select>
-      </div>
-      <div class="inline-section">
-        <span class="inline-label">Priorytet</span>
-        <div class="inline-prio-row" id="iprio-${t.id}">
-          <button class="inline-prio-btn ${ (t.urgency||1)>=2&&(t.importance||1)>=2 ? 'sel-q1':''}" onclick="inlinePrio('${t.id}',3,3,this)"><span class="prio-dot" style="background:#c04040"></span>Pilne+ważne</button>
-          <button class="inline-prio-btn ${ (t.importance||1)>=2&&!((t.urgency||1)>=2) ? 'sel-q2':''}" onclick="inlinePrio('${t.id}',1,3,this)"><span class="prio-dot" style="background:#5e8e5e"></span>Ważne</button>
-          <button class="inline-prio-btn ${ (t.urgency||1)>=2&&!((t.importance||1)>=2) ? 'sel-q3':''}" onclick="inlinePrio('${t.id}',3,1,this)"><span class="prio-dot" style="background:#b8881a"></span>Pilne</button>
-          <button class="inline-prio-btn ${ !((t.urgency||1)>=2)&&!((t.importance||1)>=2) ? 'sel-q4':''}" onclick="inlinePrio('${t.id}',1,1,this)"><span class="prio-dot" style="background:var(--bd2)"></span>Brak</button>
-        </div>
-      </div>
-      <div class="inline-section">
-        <span class="inline-label">Data</span>
-        <div class="inline-date-row" id="idate-${t.id}">
-          <button class="inline-qd" onclick="inlineDate('${t.id}','today',this)">Dziś</button>
-          <button class="inline-qd" onclick="inlineDate('${t.id}','tomorrow',this)">Jutro</button>
-          <button class="inline-qd" onclick="inlineDate('${t.id}','week',this)">Za tydzień</button>
-          <button class="inline-qd" onclick="inlineDate('${t.id}','none',this)">Brak</button>
-        </div>
-        <input type="date" class="inline-field" id="idate-inp-${t.id}" value="${t.dueDate||''}"
-          onchange="inlineSave('${t.id}','dueDate',this.value||null);syncInlineDateBtns('${t.id}',this.value)">
-      </div>
-      <div class="inline-section">
-        <span class="inline-label">Est. czas (min)</span>
-        <input type="number" class="inline-field" value="${t.estTime||''}" placeholder="30" min="1"
-          onblur="inlineSave('${t.id}','estTime',this.value?parseInt(this.value):null)">
-      </div>
-      <div class="inline-section">
-        <span class="inline-label">Powtarzanie</span>
-        <div class="inline-recur-row">
-          ${['none','daily','weekdays','weekly','monthly'].map((r,ri)=>`<button class="inline-recur-btn ${(t.recur||'none')===r?'active':''}" onclick="inlineRecur('${t.id}','${r}',this)">${['Brak','Codziennie','Dni robocze','Co tydzień','Co miesiąc'][ri]}</button>`).join('')}
-        </div>
-      </div>
-    </div>
-
     <div class="task-actions-row">
       ${showAdd ? `<button class="tact-btn primary" onclick="addToDay('${t.id}')">+ Do dnia</button>` : ''}
       <button class="tact-btn danger" onclick="deleteTask('${t.id}')">Usuń zadanie</button>
@@ -1247,30 +1204,179 @@ function taskHTML(t, showAdd) {
 /* ═══════════════════════════════════════════
    QUICK CONTROLS
 ═══════════════════════════════════════════ */
-function cycleQcPrio(tid, btn) {
+function closeAllPopovers() {
+  document.querySelectorAll('.qc-popover').forEach(p => p.style.display='none');
+}
+document.addEventListener('click', closeAllPopovers);
+
+function openPrioPopover(tid, btn) {
+  closeAllPopovers();
   const t = tasks.find(t=>t.id===tid);
   if (!t) return;
-  const u = t.urgency||1, i = t.importance||1;
-  // cycle: none → pilne+ważne → ważne → pilne → none
-  let nu,ni;
-  if (u>=2&&i>=2)      { nu=1; ni=3; }  // → ważne
-  else if (i>=2&&u<2)  { nu=3; ni=1; }  // → pilne
-  else if (u>=2&&i<2)  { nu=1; ni=1; }  // → brak
-  else                 { nu=3; ni=3; }  // → pilne+ważne
-  t.urgency=nu; t.importance=ni; t.updatedAt=Date.now();
+  const pop = document.getElementById('qcp-'+tid);
+  if (!pop) return;
+  const u=t.urgency||1, im=t.importance||1;
+  pop.innerHTML = `
+    <div class="qc-popover-title">Priorytet</div>
+    <div class="qc-pop-row">
+      <button class="qc-pop-btn ${u>=2&&im>=2?'sel-p1':''}" onclick="setQcPrio('${tid}',3,3)"><span class="prio-dot" style="background:#c04040"></span>Pilne + ważne</button>
+      <button class="qc-pop-btn ${im>=2&&u<2?'sel-p2':''}" onclick="setQcPrio('${tid}',1,3)"><span class="prio-dot" style="background:#5e8e5e"></span>Ważne</button>
+      <button class="qc-pop-btn ${u>=2&&im<2?'sel-p3':''}" onclick="setQcPrio('${tid}',3,1)"><span class="prio-dot" style="background:#b8881a"></span>Pilne</button>
+      <button class="qc-pop-btn ${u<2&&im<2?'sel':''}" onclick="setQcPrio('${tid}',1,1)">Brak</button>
+    </div>
+    <span class="qc-pop-close" onclick="closeAllPopovers()">Zamknij ✕</span>`;
+  pop.style.display = 'block';
+}
+
+function setQcPrio(tid, u, im) {
+  const t = tasks.find(t=>t.id===tid);
+  if (!t) return;
+  t.urgency=u; t.importance=im; t.updatedAt=Date.now();
   save(); scheduleAutoSync();
-  // update btn
-  const labels = {q1:'Pilne+ważne',q2:'Ważne',q3:'Pilne',q4:'Priorytet'};
-  const colors = {q1:'#c04040',q2:'#5e8e5e',q3:'#b8881a',q4:'var(--bd2)'};
-  const cls = nu>=2&&ni>=2?'q1':ni>=2?'q2':nu>=2?'q3':'q4';
-  btn.className = 'qc-btn' + (cls!=='q4'?' active-prio'+cls.slice(1):'');
-  btn.innerHTML = `<span class="prio-dot" style="background:${colors[cls]}"></span>${labels[cls]}`;
-  // sync inline prio row if open
-  inlinePrio(tid, nu, ni, null);
+  closeAllPopovers();
+  renderAll2();
+}
+
+function openDatePopover(tid, btn) {
+  closeAllPopovers();
+  const t = tasks.find(t=>t.id===tid);
+  if (!t) return;
+  const pop = document.getElementById('qcp-'+tid);
+  if (!pop) return;
+  const dt = t.dateType||'deadline';
+  pop.innerHTML = `
+    <div class="qc-popover-title">Data</div>
+    <div class="qc-pop-row">
+      <button class="qc-pop-btn" onclick="setQcDate('${tid}','today')">Dziś</button>
+      <button class="qc-pop-btn" onclick="setQcDate('${tid}','tomorrow')">Jutro</button>
+      <button class="qc-pop-btn" onclick="setQcDate('${tid}','week')">Za tydzień</button>
+      <button class="qc-pop-btn" onclick="setQcDate('${tid}','none')">Usuń datę</button>
+    </div>
+    <input type="date" class="qc-pop-inp" value="${t.dueDate||''}" onchange="setQcDate('${tid}',this.value)">
+    <div class="qc-popover-title" style="margin-top:10px">Typ daty</div>
+    <div class="qc-pop-row">
+      <button class="qc-pop-btn ${dt==='deadline'?'sel':''}" onclick="setQcDateType('${tid}','deadline')">⏰ Do dnia</button>
+      <button class="qc-pop-btn ${dt==='scheduled'?'sel':''}" onclick="setQcDateType('${tid}','scheduled')">📅 Dokładnie tego dnia</button>
+    </div>
+    <span class="qc-pop-close" onclick="closeAllPopovers()">Zamknij ✕</span>`;
+  pop.style.display = 'block';
+}
+
+function setQcDate(tid, val) {
+  const t = tasks.find(t=>t.id===tid);
+  if (!t) return;
+  if (val==='today')    t.dueDate = td();
+  else if (val==='tomorrow') { const d=new Date(); d.setDate(d.getDate()+1); t.dueDate=d.toISOString().split('T')[0]; }
+  else if (val==='week')     { const d=new Date(); d.setDate(d.getDate()+7); t.dueDate=d.toISOString().split('T')[0]; }
+  else if (val==='none')     { t.dueDate=null; }
+  else                       { t.dueDate=val||null; }
+  if (t.dueDate && t.dueDate>td()) t.dayAssigned=null;
+  t.updatedAt=Date.now(); save(); scheduleAutoSync();
+  closeAllPopovers(); renderAll2();
+}
+
+function setQcDateType(tid, type) {
+  const t = tasks.find(t=>t.id===tid);
+  if (!t) return;
+  t.dateType=type; t.updatedAt=Date.now();
+  save(); scheduleAutoSync();
+  closeAllPopovers(); renderAll2();
+}
+
+function openWaitingInline(tid) {
+  closeAllPopovers();
+  const t = tasks.find(t=>t.id===tid);
+  if (!t) return;
+  const pop = document.getElementById('qcp-'+tid);
+  if (!pop) return;
+  pop.innerHTML = `
+    <div class="qc-popover-title">Czekam na…</div>
+    <input type="text" class="qc-pop-inp" id="wait-inp-${tid}" value="${t.waitingFor||''}" placeholder="Osoba, zadanie, odpowiedź…"
+      onkeydown="if(event.key==='Enter')saveWaitingInline('${tid}')">
+    <div class="qc-pop-row" style="margin-top:8px">
+      <button class="qc-pop-btn sel" onclick="saveWaitingInline('${tid}')">Zapisz</button>
+      <button class="qc-pop-btn" onclick="clearWaiting('${tid}')">Odblokuj zadanie</button>
+    </div>
+    <span class="qc-pop-close" onclick="closeAllPopovers()">Zamknij ✕</span>`;
+  pop.style.display = 'block';
+  setTimeout(() => document.getElementById('wait-inp-'+tid)?.focus(), 80);
+}
+
+function saveWaitingInline(tid) {
+  const t = tasks.find(t=>t.id===tid);
+  if (!t) return;
+  const val = document.getElementById('wait-inp-'+tid)?.value.trim();
+  t.status='waiting'; t.waitingFor=val||null;
+  t.updatedAt=Date.now(); save(); scheduleAutoSync();
+  closeAllPopovers(); renderAll2();
+}
+
+function clearWaiting(tid) {
+  const t = tasks.find(t=>t.id===tid);
+  if (!t) return;
+  t.status='todo'; t.waitingFor=null; t.dayAssigned=null;
+  t.updatedAt=Date.now(); save(); scheduleAutoSync();
+  closeAllPopovers(); renderAll2();
+}
+
+function openQcMenu(tid, btn) {
+  closeAllPopovers();
+  const t = tasks.find(t=>t.id===tid);
+  if (!t) return;
+  const pop = document.getElementById('qcp-'+tid);
+  if (!pop) return;
+  const u=t.urgency||1, im=t.importance||1;
+  const dt=t.dateType||'deadline';
+  pop.innerHTML = `
+    <div class="qc-popover-title">Priorytet</div>
+    <div class="qc-pop-row">
+      <button class="qc-pop-btn ${u>=2&&im>=2?'sel-p1':''}" onclick="setQcPrio('${tid}',3,3)"><span class="prio-dot" style="background:#c04040"></span>Pilne+ważne</button>
+      <button class="qc-pop-btn ${im>=2&&u<2?'sel-p2':''}" onclick="setQcPrio('${tid}',1,3)"><span class="prio-dot" style="background:#5e8e5e"></span>Ważne</button>
+      <button class="qc-pop-btn ${u>=2&&im<2?'sel-p3':''}" onclick="setQcPrio('${tid}',3,1)"><span class="prio-dot" style="background:#b8881a"></span>Pilne</button>
+      <button class="qc-pop-btn ${u<2&&im<2?'sel':''}" onclick="setQcPrio('${tid}',1,1)">Brak</button>
+    </div>
+    <div class="qc-popover-title">Data</div>
+    <div class="qc-pop-row">
+      <button class="qc-pop-btn" onclick="setQcDate('${tid}','today')">Dziś</button>
+      <button class="qc-pop-btn" onclick="setQcDate('${tid}','tomorrow')">Jutro</button>
+      <button class="qc-pop-btn" onclick="setQcDate('${tid}','week')">Za tydzień</button>
+      <button class="qc-pop-btn" onclick="setQcDate('${tid}','none')">Usuń</button>
+    </div>
+    <input type="date" class="qc-pop-inp" value="${t.dueDate||''}" onchange="setQcDate('${tid}',this.value)" style="margin-bottom:6px">
+    <div class="qc-pop-row">
+      <button class="qc-pop-btn ${dt==='deadline'?'sel':''}" onclick="setQcDateType('${tid}','deadline')">⏰ Do dnia</button>
+      <button class="qc-pop-btn ${dt==='scheduled'?'sel':''}" onclick="setQcDateType('${tid}','scheduled')">📅 Dokładnie</button>
+    </div>
+    <div class="qc-popover-title">Klient</div>
+    <select class="qc-pop-inp" onchange="inlineSave('${tid}','client',this.value)">
+      ${clients.map(cl=>`<option value="${cl}" ${cl===t.client?'selected':''}>${cl}</option>`).join('')}
+    </select>
+    <div class="qc-popover-title" style="margin-top:8px">Powtarzanie</div>
+    <div class="qc-pop-row">
+      ${['none','daily','weekdays','weekly','monthly'].map((r,ri)=>`<button class="qc-pop-btn ${(t.recur||'none')===r?'sel':''}" onclick="setQcRecur('${tid}','${r}')">${['Brak','Codziennie','Dni rob.','Co tydz.','Co mies.'][ri]}</button>`).join('')}
+    </div>
+    <div class="qc-popover-title">Czekam na</div>
+    <input type="text" class="qc-pop-inp" id="wait-inp-${tid}" value="${t.waitingFor&&t.status==='waiting'?t.waitingFor:''}" placeholder="Na kogo / co czekasz?"
+      onkeydown="if(event.key==='Enter')saveWaitingInline('${tid}')">
+    <div class="qc-pop-row" style="margin-top:6px">
+      ${t.status==='waiting'?`<button class="qc-pop-btn" onclick="clearWaiting('${tid}')">Odblokuj</button>`:''}
+      <button class="qc-pop-btn sel" onclick="saveWaitingInline('${tid}')">Zapisz</button>
+    </div>
+    <span class="qc-pop-close" onclick="closeAllPopovers()">Zamknij ✕</span>`;
+  pop.style.display = 'block';
 }
 
 const RECUR_CYCLE = ['none','daily','weekdays','weekly','monthly'];
 const RECUR_LABELS = {none:'Recurrence',daily:'codziennie',weekdays:'dni rob.',weekly:'co tydz.',monthly:'co mies.'};
+
+function setQcRecur(tid, val) {
+  const t = tasks.find(t=>t.id===tid);
+  if (!t) return;
+  t.recur=val; t.updatedAt=Date.now();
+  save(); scheduleAutoSync();
+  closeAllPopovers(); renderAll2();
+}
+
 function cycleQcRecur(tid, btn) {
   const t = tasks.find(t=>t.id===tid);
   if (!t) return;
@@ -1278,36 +1384,7 @@ function cycleQcRecur(tid, btn) {
   const idx = RECUR_CYCLE.indexOf(cur);
   const next = RECUR_CYCLE[(idx+1)%RECUR_CYCLE.length];
   t.recur=next; t.updatedAt=Date.now();
-  save(); scheduleAutoSync();
-  btn.className = 'qc-btn'+(next!=='none'?' active-recur':'');
-  btn.textContent = '↻ '+RECUR_LABELS[next];
-  // update chip
-  const chipEl = document.querySelector('#tc-'+tid+' .chip-recur');
-  if (next!=='none') {
-    const fullLabels={daily:'codziennie',weekdays:'dni robocze',weekly:'co tydzień',monthly:'co miesiąc'};
-    if (chipEl) { chipEl.textContent='↻ '+fullLabels[next]; }
-    else {
-      const chips=document.querySelector('#tc-'+tid+' .task-chips');
-      if(chips){const s=document.createElement('span');s.className='chip chip-recur';s.textContent='↻ '+fullLabels[next];chips.appendChild(s);}
-    }
-  } else if (chipEl) chipEl.remove();
-}
-
-function cycleQcWaiting(tid, btn) {
-  const t = tasks.find(t=>t.id===tid);
-  if (!t) return;
-  if (t.status==='waiting') {
-    // unlock
-    t.status='todo'; t.waitingFor=null; t.dayAssigned=null;
-    btn.className='qc-btn'; btn.textContent='⏳ Czekam?';
-  } else {
-    // mark as waiting — ask who
-    const who = prompt('Na kogo / co czekasz?','');
-    if (who===null) return; // cancelled
-    t.status='waiting'; t.waitingFor=who||null;
-    btn.className='qc-btn active-wait'; btn.textContent='⏳ Czekam';
-  }
-  t.updatedAt=Date.now(); save(); scheduleAutoSync(); renderAll2();
+  save(); scheduleAutoSync(); renderAll2();
 }
 
 /* ═══════════════════════════════════════════
@@ -1515,16 +1592,11 @@ function swipeDel(tid) {
    INTERACTIONS
 ═══════════════════════════════════════════ */
 function switchDtab(tid, tab, btn) {
-  ['subs','more','edit'].forEach(t => {
+  ['subs','more'].forEach(t => {
     document.getElementById('dt-'+t+'-'+tid)?.classList.toggle('active', t===tab);
   });
   btn.closest('.detail-tabs').querySelectorAll('.dtab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  // sync date buttons when opening edit tab
-  if (tab==='edit') {
-    const t = tasks.find(t=>t.id===tid);
-    if (t) syncInlineDateBtns(tid, t.dueDate||'');
-  }
 }
 
 function toggleExpand(id, e) {
@@ -2668,7 +2740,7 @@ function restoreOpenDetails(openList) {
       det.classList.add('open');
       if (btn) btn.classList.add('open');
       // restore active tab
-      ['subs','more','edit'].forEach(t => {
+      ['subs','more'].forEach(t => {
         document.getElementById('dt-'+t+'-'+tid)?.classList.toggle('active', t===activeTab);
       });
       det.querySelectorAll('.dtab').forEach(b => {
