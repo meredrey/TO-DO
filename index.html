@@ -116,7 +116,10 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
 .sub-check.done{background:var(--sage);border-color:var(--sage)}
 .sub-check.done svg{opacity:1!important}
 .sub-check svg{width:8px;height:8px;opacity:0}
-.subtask-name{font-size:13px;color:var(--text);flex:1;line-height:1.4}
+.subtask-name{font-size:13px;color:var(--text);flex:1;line-height:1.4;cursor:text}
+.drag-handle{font-size:14px;color:var(--bd2);cursor:grab;padding:0 4px;touch-action:none;user-select:none;flex-shrink:0}
+.drag-handle:active{cursor:grabbing}
+.subtask-item.drag-over{border-top:2px solid var(--sage)}
 .subtask-name.done{text-decoration:line-through;color:var(--text3)}
 .sub-del{background:none;border:none;cursor:pointer;color:var(--text3);font-size:14px;padding:0 2px}
 .add-sub-row{display:flex;gap:6px;margin-top:8px}
@@ -370,6 +373,7 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
     <button class="nav-btn active" onclick="switchTab('today',this)">Dziś</button>
     <button class="nav-btn" onclick="switchTab('all',this)">Wszystkie</button>
     <button class="nav-btn" onclick="switchTab('plans',this)">Plany</button>
+    <button class="nav-btn" onclick="switchTab('history',this)">Historia</button>
   </div>
 
   <!-- TABS -->
@@ -380,6 +384,8 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
     <div id="remember-panel" style="padding:0 0;display:none"></div>
     <div id="all-content"></div>
   </div>
+
+  <div id="tab-history" class="tab"><div id="history-content"></div></div>
 
   <div id="tab-plans" class="tab">
     <div style="padding:14px 16px 0">
@@ -1144,10 +1150,15 @@ function taskHTML(t, showAdd) {
                 : '';
               return `
             <div class="subtask-item" id="sub-row-${t.id}-${si}">
+              <span class="drag-handle" draggable="true"
+                ondragstart="subDragStart(event,'${t.id}',${si})"
+                ondragover="subDragOver(event,'${t.id}',${si})"
+                ondrop="subDrop(event,'${t.id}',${si})"
+                ondragend="subDragEnd(event,'${t.id}')">⋮⋮</span>
               <div class="sub-check${s.done?' done':''}" onclick="toggleSub('${t.id}',${si})">
                 <svg viewBox="0 0 10 10" fill="none" stroke="white" stroke-width="2"><polyline points="1.5,5 4,7.5 8.5,2.5"/></svg>
               </div>
-              <span class="subtask-name${s.done?' done':''}" style="flex:1">${s.name}</span>
+              <span class="subtask-name${s.done?' done':''}" style="flex:1" ondblclick="editSubName('${t.id}',${si},this)" ontouchstart="startNamePress('sub-${t.id}-${si}',this)" ontouchend="cancelNamePress()">${s.name}</span>
               ${dueBadge}
               <input type="date" class="sub-date-inp" value="${s.dueDate||''}"
                 onchange="setSubDate('${t.id}',${si},this.value)"
@@ -1199,6 +1210,55 @@ function taskHTML(t, showAdd) {
     </div>
   </div>
 </div>`;
+}
+
+/* ═══════════════════════════════════════════
+   TASK NAME INLINE EDIT
+═══════════════════════════════════════════ */
+function editSubName(tid, si, el) {
+  cancelNamePress();
+  const t = tasks.find(t=>t.id===tid);
+  if (!t||!t.subtasks||!t.subtasks[si]) return;
+  const inp = document.createElement('input');
+  inp.type='text'; inp.value=t.subtasks[si].name;
+  inp.style.cssText='flex:1;border:none;border-bottom:1.5px solid var(--sage);background:transparent;outline:none;font:inherit;font-size:13px';
+  el.replaceWith(inp); inp.focus(); inp.select();
+  const save = () => {
+    const val=inp.value.trim()||t.subtasks[si].name;
+    t.subtasks[si].name=val; t.updatedAt=Date.now();
+    save2(); scheduleAutoSync();
+    const span=document.createElement('span');
+    span.className='subtask-name'+(t.subtasks[si].done?' done':'');
+    span.style.flex='1'; span.textContent=val;
+    span.ondblclick=()=>editSubName(tid,si,span);
+    inp.replaceWith(span);
+  };
+  const save2=()=>localStorage.setItem('mata_tasks_v4',JSON.stringify(tasks));
+  inp.addEventListener('blur',save);
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter')inp.blur();if(e.key==='Escape'){inp.value=t.subtasks[si].name;inp.blur();}});
+}
+
+/* Drag & drop subtask reorder */
+let dragSrcTid=null, dragSrcSi=null;
+function subDragStart(e,tid,si) { dragSrcTid=tid; dragSrcSi=si; e.dataTransfer.effectAllowed='move'; }
+function subDragOver(e,tid,si) {
+  e.preventDefault(); e.dataTransfer.dropEffect='move';
+  document.querySelectorAll('.subtask-item').forEach(r=>r.classList.remove('drag-over'));
+  document.getElementById('sub-row-'+tid+'-'+si)?.classList.add('drag-over');
+}
+function subDrop(e,tid,si) {
+  e.preventDefault();
+  if (dragSrcTid!==tid||dragSrcSi===si) return;
+  const t=tasks.find(t=>t.id===tid); if(!t||!t.subtasks) return;
+  const moved=t.subtasks.splice(dragSrcSi,1)[0];
+  t.subtasks.splice(si,0,moved);
+  t.updatedAt=Date.now();
+  localStorage.setItem('mata_tasks_v4',JSON.stringify(tasks));
+  scheduleAutoSync();
+  rerenderSubList(tid,t);
+}
+function subDragEnd(e,tid) {
+  document.querySelectorAll('.subtask-item').forEach(r=>r.classList.remove('drag-over'));
 }
 
 /* ═══════════════════════════════════════════
@@ -1257,9 +1317,8 @@ function openPrioPopover(tid, btn) {
   const u=t.urgency||1, im=t.importance||1;
   pop.innerHTML = `
     <div class="qc-popover-title">Nazwa</div>
-    <input type="text" class="qc-pop-inp" value="${t.name.replace(/"/g,'&quot;')}" style="margin-bottom:8px"
-      onblur="inlineSave('${tid}',\'name\',this.value)"
-      onkeydown="if(event.key===\'Enter\')this.blur()">
+    <input type="text" class="qc-pop-inp" id="name-inp-${tid}" style="margin-bottom:8px"
+      onkeydown="if(event.key==='Enter')saveNameFromPop('${tid}')">
     <div class="qc-popover-title">Priorytet</div>
     <div class="qc-pop-row">
       <button class="qc-pop-btn ${u>=2&&im>=2?'sel-p1':''}" onclick="setQcPrio('${tid}',3,3)"><span class="prio-dot" style="background:#c04040"></span>Pilne + ważne</button>
@@ -1407,6 +1466,17 @@ function openQcMenu(tid, btn) {
     </div>
     <span class="qc-pop-close" onclick="closeAllPopovers()">Zamknij ✕</span>`;
   pop.style.display = 'block';
+  // Set name value (avoids escaping issues)
+  const nameInp = document.getElementById('name-inp-'+tid);
+  if (nameInp) { nameInp.value = t.name; nameInp.focus(); }
+}
+
+function saveNameFromPop(tid) {
+  const inp = document.getElementById('name-inp-'+tid);
+  if (!inp) return;
+  const val = inp.value.trim();
+  if (val) inlineSave(tid, 'name', val);
+  inp.blur();
 }
 
 const RECUR_CYCLE = ['none','daily','weekdays','weekly','monthly'];
@@ -2793,9 +2863,67 @@ function restoreOpenDetails(openList) {
   });
 }
 
+function renderHistory() {
+  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const done = tasks
+    .filter(t => {
+      if (!t.done) return false;
+      if (appMode==='work' && t.client==='Prywatne') return false;
+      if (appMode==='private' && t.client!=='Prywatne') return false;
+      return (t.updatedAt||0) >= cutoff;
+    })
+    .sort((a,b) => (b.updatedAt||0)-(a.updatedAt||0));
+
+  if (!done.length) {
+    document.getElementById('history-content').innerHTML = `
+      <div class="empty"><div class="empty-icon">◈</div>
+      <div class="empty-title">Brak ukończonych</div>
+      <div class="empty-sub">Ukończone zadania z ostatnich 7 dni pojawią się tutaj.</div></div>`;
+    return;
+  }
+
+  // Group by day
+  const byDay = {};
+  done.forEach(t => {
+    const day = t.updatedAt ? new Date(t.updatedAt).toLocaleDateString('pl-PL',{weekday:'long',day:'numeric',month:'long'}) : 'Wcześniej';
+    if (!byDay[day]) byDay[day]=[];
+    byDay[day].push(t);
+  });
+
+  let html = '';
+  Object.entries(byDay).forEach(([day,dayTasks]) => {
+    html += `<div class="section-label">${day}</div>`;
+    html += dayTasks.map(t => {
+      const cc = CL_COLORS[clients.indexOf(t.client)%CL_COLORS.length]||'#6b9478';
+      return `<div style="background:var(--bg);border:.5px solid var(--bd);border-radius:12px;padding:10px 14px;margin-bottom:7px;opacity:.7;display:flex;align-items:center;gap:10px">
+        <div style="width:18px;height:18px;border-radius:50%;background:var(--sage);flex-shrink:0;display:flex;align-items:center;justify-content:center">
+          <svg viewBox="0 0 10 10" fill="none" stroke="white" stroke-width="2" width="10" height="10"><polyline points="1.5,5 4,7.5 8.5,2.5"/></svg>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;font-weight:500;color:var(--text);text-decoration:line-through;opacity:.7">${t.name}</div>
+          <span class="chip chip-client" style="background:${cc}18;color:${cc};border:.5px solid ${cc}40">${t.client||'–'}</span>
+        </div>
+        <button onclick="restoreTask('${t.id}')" style="font-size:11px;padding:5px 10px;border:.5px solid var(--bd2);border-radius:8px;background:var(--bg2);cursor:pointer;color:var(--text2);font-family:inherit;white-space:nowrap">↩ Przywróć</button>
+      </div>`;
+    }).join('');
+  });
+
+  document.getElementById('history-content').innerHTML = html;
+}
+
+function restoreTask(id) {
+  const t = tasks.find(t=>t.id===id);
+  if (!t) return;
+  t.done = false;
+  t.dayAssigned = null;
+  t.updatedAt = Date.now();
+  save(); scheduleAutoSync(); renderAll2();
+}
+
 function renderAll2() {
   const open = getOpenDetails();
   renderToday(); renderAll(); renderPlans(); renderClients(); renderSettings();
+  if (document.getElementById('tab-history')?.classList.contains('active')) renderHistory();
   if (activePlansSub==='meetings') renderMeetings();
   if (open.length) restoreOpenDetails(open);
 }
@@ -2806,11 +2934,11 @@ function switchTab(tab, el) {
   document.getElementById('tab-'+tab).classList.add('active');
   if (el) el.classList.add('active');
   else document.querySelectorAll('.nav-btn').forEach(b => { if(b.getAttribute('onclick')?.includes("'"+tab+"'")) b.classList.add('active'); });
-  // reset remember panel & filter when leaving all tab
   if (tab !== 'all') {
     const rp = document.getElementById('remember-panel');
     if (rp) rp.style.display = 'none';
   }
+  if (tab === 'history') { renderHistory(); return; }
   renderAll2();
 }
 
