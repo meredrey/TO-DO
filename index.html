@@ -1027,7 +1027,7 @@ function getDayList() {
   const aIds    = new Set(tasks.filter(t => t.dayAssigned===today && isEligible(t)).map(t=>t.id));
   const dayList = tasks.filter(t => t.dayAssigned===today && isEligible(t));
 
-  // Auto-fill from eligible pool first
+  // Auto-fill from eligible pool first — sorted by priority
   const eligibleSorted = tasks.filter(t => isEligible(t) && !aIds.has(t.id))
     .sort((a,b) => taskScore(b)-taskScore(a));
   for (const t of eligibleSorted) {
@@ -1035,6 +1035,8 @@ function getDayList() {
     t.dayAssigned = today; dayList.push(t); aIds.add(t.id);
   }
   save();
+  // Sort dayList itself by priority too
+  dayList.sort((a,b) => (a.done?1:0)-(b.done?1:0) || taskScore(b)-taskScore(a));
 
   // "następne w kolejce" = available tasks not yet assigned (includes future deadlines)
   const remaining = tasks
@@ -1126,9 +1128,16 @@ function taskHTML(t, showAdd) {
       const prioLbl=u>=2&&im>=2?'Pilne+ważne':im>=2?'Ważne':'Pilne';
       return hasPrio?`<button class="qc-btn ${prioCls}" onclick="openPrioPopover('${t.id}',this)"><span class="prio-dot" style="background:${prioDot}"></span>${prioLbl}</button>`:'';
     })()}
-    ${t.dueDate?`<button class="qc-btn ${ (t.dateType||'deadline')==='scheduled'?'active-recur':'' }" onclick="openDatePopover('${t.id}',this)">${(t.dateType||'deadline')==='scheduled'?'📅':'⏰'} ${t.dueDate}</button>`:''}
+    <button class="qc-btn ${ (t.dateType||'deadline')==='scheduled'?'active-recur':'' }" onclick="openDatePopover('${t.id}',this)">${t.dueDate ? ((t.dateType||'deadline')==='scheduled'?'📅 ':'⏰ ')+t.dueDate : '📅 Data'}</button>
     ${t.recur&&t.recur!=='none'?`<button class="qc-btn active-recur" onclick="cycleQcRecur('${t.id}',this)">↻ ${{daily:'codziennie',weekdays:'dni rob.',weekly:'co tydz.',monthly:'co mies.'}[t.recur]}</button>`:''}
-    ${t.status==='waiting'?`<button class="qc-btn active-wait" onclick="openWaitingInline('${t.id}')">⏳ ${t.waitingFor?(t.waitingFor.length>18?t.waitingFor.slice(0,18)+'…':t.waitingFor):'Czekam'}</button>`:''}
+    ${(()=>{
+      if (t.status==='waiting') {
+        const ref=tasks.find(x=>x.id===t.waitingFor);
+        const lbl=ref?'→ '+(ref.name.length>15?ref.name.slice(0,15)+'…':ref.name):(t.waitingFor||'Czekam');
+        return `<button class="qc-btn active-wait" onclick="openWaitingInline('${t.id}')">⏳ ${lbl}</button>`;
+      }
+      return `<button class="qc-btn" onclick="openWaitingInline('${t.id}')">⏳ Czekam na…</button>`;
+    })()}
     <button class="qc-btn qc-add" onclick="openQcMenu('${t.id}',this)">+ Edytuj</button>
   </div>
   <div id="qcp-${t.id}" class="qc-popover" style="display:none" onclick="event.stopPropagation()"></div>
@@ -1173,6 +1182,7 @@ function taskHTML(t, showAdd) {
                 title="Termin podzadania" style="width:36px;padding:2px 4px;opacity:.4;cursor:pointer"
                 onfocus="this.style.width='130px';this.style.opacity='1'"
                 onblur="this.style.width='36px';this.style.opacity=this.value?'1':'.4'">
+              ${s.dueDate?`<button class="sub-date-type" title="Typ daty" onclick="cycleSubDateType('${t.id}',${si},this)" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--text3);padding:0 2px;flex-shrink:0">${(s.dateType||'deadline')==='scheduled'?'📅':'⏰'}</button>`:''}
               <button class="sub-del" onclick="deleteSub('${t.id}',${si})">×</button>
             </div>`;
             }).join('')
@@ -1399,24 +1409,45 @@ function openWaitingInline(tid) {
   if (!t) return;
   const pop = document.getElementById('qcp-'+tid);
   if (!pop) return;
+  const otherTasks = tasks.filter(x=>!x.done&&x.id!==tid)
+    .sort((a,b)=>a.name.localeCompare(b.name,'pl'));
+  const isRef = t.waitingFor && tasks.some(x=>x.id===t.waitingFor);
   pop.innerHTML = `
     <div class="qc-popover-title">Czekam na…</div>
-    <input type="text" class="qc-pop-inp" id="wait-inp-${tid}" value="${t.waitingFor||''}" placeholder="Osoba, zadanie, odpowiedź…"
-      onkeydown="if(event.key==='Enter')saveWaitingInline('${tid}')">
+    <div class="qc-pop-row" style="margin-bottom:8px">
+      <button class="qc-pop-btn ${!isRef?'sel':''}" onclick="this.closest('.qc-popover').querySelector('.wait-text').style.display='';this.closest('.qc-popover').querySelector('.wait-task').style.display='none';this.classList.add('sel');this.nextElementSibling.classList.remove('sel')">Osobę / opis</button>
+      <button class="qc-pop-btn ${isRef?'sel':''}" onclick="this.closest('.qc-popover').querySelector('.wait-task').style.display='';this.closest('.qc-popover').querySelector('.wait-text').style.display='none';this.classList.add('sel');this.previousElementSibling.classList.remove('sel')">Inne zadanie</button>
+    </div>
+    <div class="wait-text" style="display:${isRef?'none':''}">
+      <input type="text" class="qc-pop-inp" id="wait-inp-${tid}" placeholder="Osoba, odpowiedź…"
+        onkeydown="if(event.key==='Enter')saveWaitingInline('${tid}')">
+    </div>
+    <div class="wait-task" style="display:${isRef?'':'none'}">
+      <select class="qc-pop-inp" id="wait-task-${tid}">
+        <option value="">— wybierz zadanie —</option>
+        ${otherTasks.map(x=>`<option value="${x.id}" ${x.id===t.waitingFor?'selected':''}>${x.name}${x.client?' ('+x.client+')':''}</option>`).join('')}
+      </select>
+    </div>
     <div class="qc-pop-row" style="margin-top:8px">
       <button class="qc-pop-btn sel" onclick="saveWaitingInline('${tid}')">Zapisz</button>
-      <button class="qc-pop-btn" onclick="clearWaiting('${tid}')">Odblokuj zadanie</button>
+      ${t.status==='waiting'?`<button class="qc-pop-btn" onclick="clearWaiting('${tid}')">Odblokuj</button>`:''}
     </div>
     <span class="qc-pop-close" onclick="closeAllPopovers()">Zamknij ✕</span>`;
   pop.style.display = 'block';
-  setTimeout(() => document.getElementById('wait-inp-'+tid)?.focus(), 80);
+  setTimeout(() => {
+    const inp = document.getElementById('wait-inp-'+tid);
+    if (inp && !isRef) { inp.value = t.waitingFor||''; inp.focus(); }
+  }, 80);
 }
 
 function saveWaitingInline(tid) {
   const t = tasks.find(t=>t.id===tid);
   if (!t) return;
-  const val = document.getElementById('wait-inp-'+tid)?.value.trim();
-  t.status='waiting'; t.waitingFor=val||null;
+  const taskSel = document.getElementById('wait-task-'+tid);
+  const textInp = document.getElementById('wait-inp-'+tid);
+  const taskSelVisible = taskSel && taskSel.closest('.wait-task')?.style.display !== 'none';
+  let val = taskSelVisible ? (taskSel.value||null) : (textInp?.value.trim()||null);
+  t.status='waiting'; t.waitingFor=val;
   t.updatedAt=Date.now(); save(); scheduleAutoSync();
   closeAllPopovers(); renderAll2();
 }
@@ -1783,6 +1814,17 @@ function updateTaskDateFromSubs(t) {
     .sort();
   // nothing to update — effectiveDueDate handles display
   // but we don't mutate t.dueDate since it's computed dynamically
+}
+
+function cycleSubDateType(tid, si, btn) {
+  const t = tasks.find(t=>t.id===tid);
+  if (!t||!t.subtasks||!t.subtasks[si]) return;
+  const s = t.subtasks[si];
+  s.dateType = (s.dateType||'deadline')==='deadline' ? 'scheduled' : 'deadline';
+  t.updatedAt = Date.now();
+  save(); scheduleAutoSync();
+  btn.textContent = s.dateType==='scheduled' ? '📅' : '⏰';
+  btn.title = s.dateType==='scheduled' ? 'Dokładnie tego dnia' : 'Do dnia (deadline)';
 }
 
 function toggleSub(tid, si) {
@@ -2344,6 +2386,32 @@ function renderToday() {
     }
 
   }
+  // Blocked tasks section — always visible for review
+  const blocked = tasks.filter(t =>
+    !t.done && t.status==='waiting' &&
+    (appMode==='work' ? t.client!=='Prywatne' : t.client==='Prywatne')
+  );
+  if (blocked.length) {
+    html += `<div class="section-label" style="margin-top:16px;display:flex;align-items:center;justify-content:space-between">
+      <span>⏳ zablokowane (${blocked.length})</span>
+    </div>`;
+    blocked.forEach(t => {
+      const ref = t.waitingFor ? tasks.find(x=>x.id===t.waitingFor) : null;
+      const waitLabel = ref ? '→ '+ref.name : (t.waitingFor||'?');
+      const cc = CL_COLORS[clients.indexOf(t.client)%CL_COLORS.length]||'#6b9478';
+      html += `<div style="background:var(--bg);border:.5px solid var(--amber);border-radius:12px;padding:10px 14px;margin-bottom:7px;opacity:.85">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:500;color:var(--text)">${t.name}</div>
+            <div style="font-size:11px;color:var(--amber);margin-top:2px">⏳ ${waitLabel}</div>
+          </div>
+          <span class="chip chip-client" style="background:${cc}18;color:${cc};border:.5px solid ${cc}40;font-size:10px">${t.client}</span>
+          <button onclick="clearWaiting('${t.id}')" style="font-size:11px;padding:5px 10px;border:.5px solid var(--sage);border-radius:8px;background:var(--sage-l);cursor:pointer;color:var(--sage-d);font-family:inherit;white-space:nowrap;flex-shrink:0">Odblokuj</button>
+        </div>
+      </div>`;
+    });
+  }
+
   document.getElementById('today-content').innerHTML = html;
   updateHeroProgress();
 }
