@@ -668,10 +668,15 @@ function syncTiles() {
   const tw = W / COLS, th = H / ROWS;
   const old = new Map(tiles.map(t => [t.col+','+t.row, t]));
   tiles = [];
+  // Only count active (not done) tasks — ignore completed and recurrence history
+  const activeModeFiltered = tasks.filter(t =>
+    !t.done &&
+    (appMode==='work' ? t.client!=='Prywatne' : t.client==='Prywatne')
+  ).length;
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
       const idx = r * COLS + c;
-      const alive = idx < tasks.length;
+      const alive = idx < activeModeFiltered;
       const key = c + ',' + r;
       if (old.has(key)) {
         const t = old.get(key); t.alive = alive; tiles.push(t);
