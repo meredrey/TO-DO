@@ -187,7 +187,8 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
 .toggle-btn.sel-i{background:var(--sage-l);border-color:var(--sage);color:var(--sage-d)}
 .toggle-btn.sel-e{background:var(--teal-l);border-color:var(--teal);color:var(--teal)}
 .ql{font-size:12px;color:var(--sage);cursor:pointer;text-decoration:underline;text-underline-offset:2px}
-.quick-controls{display:flex;flex-wrap:wrap;gap:5px;padding:8px 14px;border-top:.5px solid var(--bd);background:var(--bg2)}
+.quick-controls{display:none;flex-wrap:wrap;gap:5px;padding:8px 14px;border-top:.5px solid var(--bd);background:var(--bg2)}
+.quick-controls.open{display:flex}
 .qc-btn.qc-add{border-style:dashed;color:var(--text3);border-color:var(--bd)}
 .qc-btn.qc-add:hover{border-color:var(--mauve);color:var(--mauve)}
 .qc-popover{background:var(--bg);border:.5px solid var(--bd2);border-radius:12px;padding:10px;box-shadow:0 4px 16px rgba(0,0,0,.08);position:relative;z-index:10;margin:0 14px 8px}
@@ -1766,10 +1767,13 @@ function toggleExpand(id, e) {
   if (e.target.closest('.check-circle,.add-sub-row,.sub-check,.sub-del,.add-sub-btn,.sub-date-inp,.note-area,.note-save-btn,.dtab,.show-link-form-btn,.add-link-form,.link-open,.link-del,.btn-add-link,.btn-cancel-lf,.tact-btn,.task-expand-btn,.task-card-actions,.quick-controls')) return;
   const det = document.getElementById('det-'+id);
   const btn = document.getElementById('exp-'+id);
+  const qc  = document.getElementById('qc-'+id);
+  const pop = document.getElementById('qcp-'+id);
   const open = !det.classList.contains('open');
   det.classList.toggle('open', open);
   btn?.classList.toggle('open', open);
-  // set name field value (avoids HTML escaping issues)
+  qc?.classList.toggle('open', open);
+  if (!open && pop) pop.style.display = 'none';
   if (open) {
     const t = tasks.find(t=>t.id===id);
     const inp = document.getElementById('det-name-'+id);
@@ -2951,6 +2955,7 @@ function restoreOpenDetails(openList) {
     if (det) {
       det.classList.add('open');
       if (btn) btn.classList.add('open');
+      document.getElementById('qc-'+tid)?.classList.add('open');
       // restore active tab
       ['subs','more'].forEach(t => {
         document.getElementById('dt-'+t+'-'+tid)?.classList.toggle('active', t===activeTab);
