@@ -984,7 +984,10 @@ function getDayList() {
     if (t.done || t.status==='waiting') return false;
     if (!modeOk(t)) return false;
     const edd = effectiveDueDate(t);
-    if (t.dateType==='scheduled') return edd===today;
+    if (t.dateType==='scheduled') {
+      // exact day: show on that day OR if it passed (overdue)
+      return edd===today || (edd && edd<today);
+    }
     return !edd || edd<=today;
   };
 
@@ -1772,6 +1775,7 @@ function toggleDone(id, e) {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2,5),
       done: false,
       dueDate: nextRecurDate(t),
+      dateType: 'deadline', // always deadline so overdue instances appear in Dziś
       dayAssigned: null,
       subtasks: (t.subtasks||[]).map(s => Object.assign({},s,{done:false})),
       createdAt: Date.now(),
@@ -3044,6 +3048,7 @@ function initDate() {
 window.addEventListener('resize', () => { initCanvas(); });
 initDate();
 // normalize any bad date formats in localStorage (from Sheets sync)
+const _today = new Date().toISOString().split('T')[0];
 tasks = tasks.map(t => {
   ['dueDate','dayAssigned'].forEach(f => {
     if (t[f] && typeof t[f]==='string' && t[f].length > 10) t[f] = t[f].slice(0,10);
@@ -3052,6 +3057,10 @@ tasks = tasks.map(t => {
     if (s.dueDate && typeof s.dueDate==='string' && s.dueDate.length>10) s.dueDate = s.dueDate.slice(0,10);
     return s;
   });
+  // scheduled tasks with past date → convert to deadline so they show as overdue in Dziś
+  if (!t.done && t.dateType==='scheduled' && t.dueDate && t.dueDate < _today) {
+    t.dateType = 'deadline';
+  }
   return t;
 });
 save();
