@@ -965,6 +965,13 @@ function subProg(t) {
 function getDayList() {
   const today = td();
 
+  // Reset stale dayAssigned from previous days — let algorithm re-assign
+  tasks.forEach(t => {
+    if (t.dayAssigned && t.dayAssigned !== today && !t.done) {
+      t.dayAssigned = null;
+    }
+  });
+
   // mode filter helper
   const modeOk = t => {
     if (appMode==='work'    && t.client==='Prywatne') return false;
