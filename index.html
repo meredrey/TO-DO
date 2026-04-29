@@ -1752,14 +1752,23 @@ function toggleExpand(id, e) {
 }
 
 function nextRecurDate(t) {
-  // dueDate is always required for recurrence (enforced at set time)
-  const [y,mo,d] = (t.dueDate || td()).split('-').map(Number);
+  // Always anchors to dueDate to preserve weekday
+  // Returns the next occurrence AFTER dueDate
+  const [y,mo,d] = t.dueDate.split('-').map(Number);
   const date = new Date(y, mo-1, d);
-  if (t.recur === 'daily')         { date.setDate(date.getDate()+1); }
-  else if (t.recur === 'weekdays') { date.setDate(date.getDate()+1); while(date.getDay()===0||date.getDay()===6) date.setDate(date.getDate()+1); }
-  else if (t.recur === 'weekly')   { date.setDate(date.getDate()+7); }
-  else if (t.recur === 'monthly')  { date.setMonth(date.getMonth()+1); }
-  const yy=date.getFullYear(), mm=String(date.getMonth()+1).padStart(2,'0'), dd=String(date.getDate()).padStart(2,'0');
+  if (t.recur === 'daily') {
+    date.setDate(date.getDate() + 1);
+  } else if (t.recur === 'weekdays') {
+    date.setDate(date.getDate() + 1);
+    while (date.getDay() === 0 || date.getDay() === 6) date.setDate(date.getDate() + 1);
+  } else if (t.recur === 'weekly') {
+    date.setDate(date.getDate() + 7);
+  } else if (t.recur === 'monthly') {
+    date.setMonth(date.getMonth() + 1);
+  }
+  const yy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
   return `${yy}-${mm}-${dd}`;
 }
 
@@ -1770,12 +1779,13 @@ function toggleDone(id, e) {
   const wasDone = t.done;
   t.done = !t.done;
 
-  if (!wasDone && t.recur && t.recur !== 'none') {
+  if (!wasDone && t.recur && t.recur !== 'none' && t.dueDate) {
+    // Create next occurrence anchored to original dueDate
     const next = Object.assign({}, t, {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2,5),
       done: false,
-      dueDate: nextRecurDate(t),
-      dateType: 'deadline', // always deadline so overdue instances appear in Dziś
+      dueDate: nextRecurDate(t),  // e.g. next Monday if original was Monday
+      dateType: 'deadline',       // always deadline — shows as overdue if missed
       dayAssigned: null,
       subtasks: (t.subtasks||[]).map(s => Object.assign({},s,{done:false})),
       createdAt: Date.now(),
@@ -3050,6 +3060,7 @@ initDate();
 // normalize any bad date formats in localStorage (from Sheets sync)
 const _today = new Date().toISOString().split('T')[0];
 tasks = tasks.map(t => {
+  // 1. Normalize date formats from Sheets (ISO → yyyy-MM-dd)
   ['dueDate','dayAssigned'].forEach(f => {
     if (t[f] && typeof t[f]==='string' && t[f].length > 10) t[f] = t[f].slice(0,10);
   });
@@ -3057,9 +3068,14 @@ tasks = tasks.map(t => {
     if (s.dueDate && typeof s.dueDate==='string' && s.dueDate.length>10) s.dueDate = s.dueDate.slice(0,10);
     return s;
   });
-  // scheduled tasks with past date → convert to deadline so they show as overdue in Dziś
-  if (!t.done && t.dateType==='scheduled' && t.dueDate && t.dueDate < _today) {
+  // 2. Scheduled tasks with PAST date → convert to deadline
+  //    So they appear as overdue in Dziś instead of disappearing
+  if (!t.done && t.dateType === 'scheduled' && t.dueDate && t.dueDate < _today) {
     t.dateType = 'deadline';
+  }
+  // 3. Reset stale dayAssigned from previous days
+  if (t.dayAssigned && t.dayAssigned !== _today && !t.done) {
+    t.dayAssigned = null;
   }
   return t;
 });
