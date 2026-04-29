@@ -2182,13 +2182,11 @@ function openModal(id=null) {
   editId = id; fU=1; fI=1; fE='low'; fStatus='todo'; fRecur='none'; fDateType='deadline'; fWaitingType='person'; detailsOpen=false;
   document.getElementById('detail-mode').style.display = 'none';
   document.getElementById('dtoggle').textContent = '+ więcej opcji';
-  document.getElementById('waiting-who-wrap').style.display = 'none';
-  ['f-name','f-time','f-due','f-waiting','f-note'].forEach(i => { const el=document.getElementById(i); if(el) el.value=''; });
+  ['f-name','f-time','f-due','f-note'].forEach(i => { const el=document.getElementById(i); if(el) el.value=''; });
   document.getElementById('sheet-title').textContent = id ? 'Edytuj zadanie' : 'Nowe zadanie';
   document.getElementById('save-btn').textContent    = id ? 'Zapisz zmiany'  : 'Dodaj zadanie';
   const sel = document.getElementById('f-client');
   sel.innerHTML = clients.map(c => `<option value="${c}">${c}</option>`).join('');
-  // default client based on mode
   if (!id) {
     if (appMode === 'private') sel.value = 'Prywatne';
     else { const firstWork = clients.find(c => c !== 'Prywatne'); if (firstWork) sel.value = firstWork; }
@@ -2197,29 +2195,15 @@ function openModal(id=null) {
   if (id) {
     const t = tasks.find(t => t.id === id);
     if (t) {
-      document.getElementById('f-name').value    = t.name;
-      document.getElementById('f-time').value    = t.estTime || '';
-      document.getElementById('f-due').value     = t.dueDate || '';
-      const isTaskRef = t.waitingFor && tasks.some(tx => tx.id === t.waitingFor);
-      fWaitingType = isTaskRef ? 'task' : 'person';
-      document.getElementById('f-waiting').value = isTaskRef ? '' : (t.waitingFor || '');
-      if (isTaskRef) {
-        populateWaitingTasks(id);
-        setTimeout(() => {
-          const sel = document.getElementById('f-waiting-task');
-          if (sel) sel.value = t.waitingFor;
-        }, 50);
-      }
-      document.getElementById('f-note').value    = t.note || '';
+      document.getElementById('f-name').value = t.name;
+      const timeEl = document.getElementById('f-time'); if(timeEl) timeEl.value = t.estTime || '';
+      const dueEl  = document.getElementById('f-due');  if(dueEl)  dueEl.value  = t.dueDate || '';
+      const noteEl = document.getElementById('f-note'); if(noteEl) noteEl.value = t.note || '';
       sel.value = t.client || clients[0];
-      fU=t.urgency||3; fI=t.importance||3; fE=t.energy||'low'; fStatus=t.status||'todo'; fRecur=t.recur||'none'; fDateType=t.dateType||'deadline';
+      fU=t.urgency||1; fI=t.importance||1; fE=t.energy||'low'; fStatus=t.status||'todo'; fRecur=t.recur||'none'; fDateType=t.dateType||'deadline';
       detailsOpen=true;
       document.getElementById('detail-mode').style.display = 'block';
       document.getElementById('dtoggle').textContent = '− mniej opcji';
-      if (fStatus==='waiting') document.getElementById('waiting-who-wrap').style.display = 'block';
-      setU(fU); setI(fI); setE(fE);
-      document.getElementById('status-todo').className    = 'toggle-btn'+(fStatus==='todo'?'    sel-u':'');
-      document.getElementById('status-waiting').className = 'toggle-btn'+(fStatus==='waiting'?' sel-u':'');
     }
   }
   document.getElementById('overlay').classList.add('open');
@@ -2228,8 +2212,6 @@ function openModal(id=null) {
     syncQuickDates();
     setDateType(fDateType);
     syncPrioButtons();
-    if (fStatus==='waiting') { populateWaitingTasks(editId); setWaitingType(fWaitingType); }
-    // sync recur buttons
     document.querySelectorAll('#recur-row .recur-btn').forEach(b => b.classList.toggle('active', b.getAttribute('onclick')?.includes("'"+fRecur+"'")));
   }, 120);
 }
@@ -2244,13 +2226,7 @@ function saveTask() {
   const estTime    = parseInt(document.getElementById('f-time').value) || null;
   const dueDate    = document.getElementById('f-due').value || null;
   let waitingFor = null;
-  if (fStatus === 'waiting') {
-    if (fWaitingType === 'task') {
-      waitingFor = document.getElementById('f-waiting-task')?.value || null;
-    } else {
-      waitingFor = document.getElementById('f-waiting').value.trim() || null;
-    }
-  }
+  // status/waiting removed from form — defaults to todo on creation
   const note       = document.getElementById('f-note').value.trim() || null;
 
   if (editId) {
@@ -2258,14 +2234,14 @@ function saveTask() {
     if (t) {
       const newEdd = dueDate || (t.subtasks||[]).map(s=>s.dueDate).filter(Boolean).sort()[0] || null;
       if (newEdd && newEdd > td() && t.dayAssigned === td()) t.dayAssigned = null;
-      Object.assign(t, {name,client,estTime,dueDate,urgency:fU,importance:fI,energy:fE,status:fStatus,waitingFor,note,recur:fRecur,dateType:fDateType,updatedAt:Date.now()});
+      Object.assign(t, {name,client,estTime,dueDate,urgency:fU,importance:fI,energy:fE,note,recur:fRecur,dateType:fDateType,updatedAt:Date.now()});
       syncTask(t);
     }
   } else {
     const newTask = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2,5),
       name, client, estTime, dueDate, urgency:fU, importance:fI, energy:fE,
-      status:fStatus, waitingFor, note, recur:fRecur, dateType:fDateType, done:false, subtasks:[], links:[],
+      status:'todo', waitingFor:null, note, recur:fRecur, dateType:fDateType, done:false, subtasks:[], links:[],
       createdAt: Date.now(), dayAssigned: null
     };
     tasks.push(newTask);
