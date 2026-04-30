@@ -785,9 +785,8 @@ function appearTile(idx) {
   scheduleRender();
 }
 
-function updateHeroProgress() {
-  const { dayList: dayTasksAll } = getDayList();
-  const dayTasks = dayTasksAll;
+function updateHeroProgress(dayTasksIn) {
+  const dayTasks = dayTasksIn || [];
   const done  = dayTasks.filter(t => t.done).length;
   const total = dayTasks.length;
   const pct   = total ? Math.round(done/total*100) : 0;
@@ -2279,6 +2278,7 @@ function openModal(id=null) {
       const timeEl = document.getElementById('f-time'); if(timeEl) timeEl.value = t.estTime || '';
       const dueEl  = document.getElementById('f-due');  if(dueEl)  dueEl.value  = t.dueDate || '';
       const noteEl = document.getElementById('f-note'); if(noteEl) noteEl.value = t.note || '';
+      const dueEl2 = document.getElementById('f-due');   if(dueEl2)  dueEl2.value  = t.dueDate || '';
       sel.value = t.client || clients[0];
       fU=t.urgency||1; fI=t.importance||1; fE=t.energy||'low'; fStatus=t.status||'todo'; fRecur=t.recur||'none'; fDateType=t.dateType||'deadline';
       detailsOpen=true;
@@ -2463,7 +2463,7 @@ function renderToday() {
   }
 
   document.getElementById('today-content').innerHTML = html;
-  updateHeroProgress();
+  updateHeroProgress(dayList);
 }
 
 function renderAll() {
