@@ -3170,7 +3170,10 @@ async function autoSyncOnStart() {
     const localMap = Object.fromEntries(tasks.map(t=>[t.id, t.updatedAt||0]));
 
     const missingLocally = remoteTasks.filter(t => !localIds.has(t.id));
-    const newerInSheets  = remoteTasks.filter(t => localIds.has(t.id) && (t.updatedAt||0) > (localMap[t.id]||0));
+    // Only accept remote version if it's >10s newer than local
+    // This prevents server-side updatedAt bumps from overwriting local changes
+    const SYNC_MARGIN = 10000; // 10 seconds
+    const newerInSheets  = remoteTasks.filter(t => localIds.has(t.id) && (t.updatedAt||0) > (localMap[t.id]||0) + SYNC_MARGIN);
 
     if (missingLocally.length > 0 || newerInSheets.length > 0) {
       const merged = [...tasks];
