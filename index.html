@@ -192,7 +192,7 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
 .qc-btn.qc-add{border-style:dashed;color:var(--text3);border-color:var(--bd)}
 .qc-btn.qc-add:hover{border-color:var(--mauve);color:var(--mauve)}
 .qc-popover{background:var(--bg);border:.5px solid var(--bd2);border-radius:12px;padding:10px;box-shadow:0 4px 16px rgba(0,0,0,.08);position:relative;z-index:10;margin:0 14px 8px}
-.chip-popover{background:var(--bg);border:.5px solid var(--bd2);border-radius:14px;padding:12px 14px;box-shadow:0 4px 20px rgba(0,0,0,.12);position:absolute;left:12px;right:12px;z-index:200;margin-top:4px}
+.chip-popover{background:var(--bg);border:.5px solid var(--bd2);border-radius:14px;padding:12px 14px;box-shadow:0 4px 20px rgba(0,0,0,.12);position:relative;left:0;right:0;z-index:200;margin:4px 0 8px}
 .qc-popover-title{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
 .qc-pop-row{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
 .qc-pop-btn{padding:6px 11px;border:.5px solid var(--bd);border-radius:20px;background:var(--bg2);font-size:12px;font-weight:500;cursor:pointer;color:var(--text2);transition:all .15s;font-family:inherit}
@@ -1061,8 +1061,8 @@ function taskHTML(t, showAdd) {
         <span class="chip chip-client" style="background:${cc}18;color:${cc};border:.5px solid ${cc}40">${t.client||'–'}</span>
         ${isQuick ? '<span class="chip chip-quick">&lt;10min</span>' : ''}
         ${t.estTime && !isQuick ? `<span class="chip chip-time">${fmtTime(t.estTime)}</span>` : ''}
-        <span class="chip ${hasNonDefaultPriority?qc:''}" onclick="event.stopPropagation();openPrioPopoverDirect('${t.id}',this)" style="cursor:pointer${hasNonDefaultPriority?'':';border-style:dashed;color:var(--text3)'}">${hasNonDefaultPriority?ql:'+ priorytet'}</span>
-        ${eff ? `<span class="chip ${isOverdue?'chip-overdue':t.dateType==='scheduled'?'chip-scheduled':'chip-due'}" onclick="event.stopPropagation();openDateRecurPopover('${t.id}',this)" style="cursor:pointer">${isOverdue?'! ':''}${t.dateType==='scheduled'?'📅 ':''}${eff}${!t.dueDate?' *':''}</span>` : `<span class="chip" onclick="event.stopPropagation();openDateRecurPopover('${t.id}',this)" style="cursor:pointer;border-style:dashed;color:var(--text3)">+ data</span>`}
+        ${hasNonDefaultPriority ? `<span class="chip ${qc}" onclick="event.stopPropagation();openPrioPopoverDirect('${t.id}',this)" style="cursor:pointer">${ql}</span>` : ''}
+        ${eff ? `<span class="chip ${isOverdue?'chip-overdue':t.dateType==='scheduled'?'chip-scheduled':'chip-due'}" onclick="event.stopPropagation();openDateRecurPopover('${t.id}',this)" style="cursor:pointer">${isOverdue?'! ':''}${t.dateType==='scheduled'?'📅 ':''}${eff}${!t.dueDate?' *':''}</span>` : ''}
         ${t.status==='waiting' ? `<span class="chip chip-waiting">czekam: ${(()=>{const ref=tasks.find(tx=>tx.id===t.waitingFor);return ref?'→ '+ref.name:(t.waitingFor||'?');})()}</span>` : ''}
         ${t.recur&&t.recur!=='none'?`<span class="chip chip-recur" onclick="event.stopPropagation();openDateRecurPopover('${t.id}',this)" style="cursor:pointer" title="Zmień powtarzanie">↻ ${{daily:'codziennie',weekdays:'dni robocze',weekly:'co tydzień',monthly:'co miesiąc'}[t.recur]||''}</span>`:''}
         ${hasNote  ? '<span class="chip chip-has-note">notatka</span>' : ''}
@@ -1315,9 +1315,10 @@ function openDateRecurPopover(tid, chipEl) {
       ).join('')}
     </div>`;
   // Insert after the task card wrap
-  const wrap = document.getElementById('tcw-'+tid);
+  // Insert after card wrapper (taskHTML uses tcw-, planTaskHTML uses ptc-)
+  const wrap = document.getElementById('tcw-'+tid) || document.getElementById('ptc-'+tid)?.closest('.task-card-wrap');
   if (wrap) { wrap.parentNode.insertBefore(pop, wrap.nextSibling); }
-  else { chipEl.closest('.task-card')?.after(pop); }
+  else { chipEl?.closest('[id^="tc"],[id^="ptc"]')?.after(pop) || document.body.appendChild(pop); }
 }
 
 function updatePopTypeButtons(btn) {
@@ -1792,7 +1793,7 @@ function switchDtab(tid, tab, btn) {
 }
 
 function toggleExpand(id, e) {
-  if (e.target.closest('.check-circle,.add-sub-row,.sub-check,.sub-del,.add-sub-btn,.sub-date-inp,.note-area,.note-save-btn,.dtab,.show-link-form-btn,.add-link-form,.link-open,.link-del,.btn-add-link,.btn-cancel-lf,.tact-btn,.task-expand-btn,.task-card-actions,.quick-controls')) return;
+  if (e.target.closest('.check-circle,.add-sub-row,.sub-check,.sub-del,.add-sub-btn,.sub-date-inp,.note-area,.note-save-btn,.dtab,.show-link-form-btn,.add-link-form,.link-open,.link-del,.btn-add-link,.btn-cancel-lf,.tact-btn,.task-expand-btn,.task-card-actions,.quick-controls,.chip,.chip-popover')) return;
   const det = document.getElementById('det-'+id);
   const btn = document.getElementById('exp-'+id);
   const qc  = document.getElementById('qc-'+id);
