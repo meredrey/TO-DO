@@ -965,44 +965,54 @@ function subProg(t) {
 
 function getDayList() {
   const today = td();
+  const nextWeek = new Date(Date.now()+7*24*60*60*1000).toISOString().split('T')[0];
 
-  // mode filter helper
   const modeOk = t => {
     if (appMode==='work'    && t.client==='Prywatne') return false;
     if (appMode==='private' && t.client!=='Prywatne') return false;
     return true;
   };
 
-  // ELIGIBLE: scheduled=exact day OR past, deadline=date<=today or no date
-  const isEligible = t => {
-    if (t.done || t.status==='waiting') return false;
-    if (!modeOk(t)) return false;
+  const active = tasks.filter(t => !t.done && t.status!=='waiting' && modeOk(t));
+  const used = new Set();
+  const take = (arr) => { arr.forEach(t=>used.add(t.id)); return arr; };
+
+  // Tier 1: due today or overdue
+  const tier1 = take(active.filter(t => {
     const edd = effectiveDueDate(t);
-    if (t.dateType==='scheduled') return edd===today || (edd && edd<today);
-    return !edd || edd<=today;
-  };
+    return edd && edd <= today;
+  }).sort((a,b) => taskScore(b)-taskScore(a)));
 
-  // AVAILABLE for queue: all non-done non-waiting tasks in current mode
-  const isAvailable = t => {
-    if (t.done || t.status==='waiting') return false;
-    if (!modeOk(t)) return false;
-    if (t.dateType==='scheduled' && effectiveDueDate(t) > today) return false;
-    return true;
-  };
+  // Tier 2: urgent + important (future or no date)
+  const tier2 = take(active.filter(t =>
+    !used.has(t.id) && (t.urgency||1)>=2 && (t.importance||1)>=2
+  ).sort((a,b) => taskScore(b)-taskScore(a)));
 
-  // Eligible tasks sorted by priority
-  const eligible = tasks.filter(isEligible).sort((a,b) => taskScore(b)-taskScore(a));
+  // Tier 3: urgent only
+  const tier3 = take(active.filter(t =>
+    !used.has(t.id) && (t.urgency||1)>=2
+  ).sort((a,b) => taskScore(b)-taskScore(a)));
 
-  // Take top maxDay tasks for today's list — NO mutation of tasks array
-  const dayList = eligible.slice(0, maxDay);
-  const dayIds  = new Set(dayList.map(t=>t.id));
+  // Tier 4: due within 7 days
+  const tier4 = take(active.filter(t => {
+    if (used.has(t.id)) return false;
+    const edd = effectiveDueDate(t);
+    return edd && edd > today && edd <= nextWeek;
+  }).sort((a,b) => (effectiveDueDate(a)||'').localeCompare(effectiveDueDate(b)||'')));
 
-  // Remaining: eligible tasks beyond maxDay + future available
-  const remaining = tasks
-    .filter(t => isAvailable(t) && !dayIds.has(t.id))
+  // Tier 5: important only
+  const tier5 = take(active.filter(t =>
+    !used.has(t.id) && (t.importance||1)>=2
+  ).sort((a,b) => taskScore(b)-taskScore(a)));
+
+  // Tier 6: rest
+  const tier6 = active.filter(t => !used.has(t.id))
     .sort((a,b) => taskScore(b)-taskScore(a));
 
-  return { dayList, remaining };
+  const allSorted = [...tier1,...tier2,...tier3,...tier4,...tier5,...tier6];
+  const dayList = allSorted.slice(0, maxDay);
+
+  return { dayList, remaining: [] };
 }
 
 /* ═══════════════════════════════════════════
@@ -2392,7 +2402,7 @@ function toggleDoneSection() {
 }
 
 function renderToday() {
-  const { dayList, remaining } = getDayList();
+  const { dayList } = getDayList();
   const done = dayList.filter(t => t.done).length;
   let html = '';
   // Today's meetings banner
@@ -2426,7 +2436,7 @@ function renderToday() {
     const pending  = dayList.filter(t => !t.done);
     const finished = dayList.filter(t =>  t.done);
     if (pending.length)  html += '<div class="section-label">do zrobienia</div>' + pending.map(t => taskHTML(t,false)).join('');
-    if (remaining.length) html += '<div class="section-label">następne w kolejce</div>' + remaining.slice(0,done===dayList.length?5:2).map(t => taskHTML(t,true)).join('');
+
     if (finished.length) {
       html += `<div class="section-label" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between" onclick="toggleDoneSection()">
         <span>ukończone (${finished.length})</span>
