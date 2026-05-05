@@ -977,37 +977,49 @@ function getDayList() {
   const used = new Set();
   const take = (arr) => { arr.forEach(t=>used.add(t.id)); return arr; };
 
-  // Tier 1: due today or overdue
+  // Helper: is task visible today?
+  // scheduled → only on exact day; deadline → on or after due date (or no date)
+  const visibleToday = t => {
+    const edd = effectiveDueDate(t);
+    if (t.dateType === 'scheduled') return edd === today; // ONLY on exact day
+    return !edd || edd <= today; // deadline: today or overdue or no date
+  };
+
+  // Tier 1: due today or overdue (deadline only; scheduled only on exact day)
   const tier1 = take(active.filter(t => {
     const edd = effectiveDueDate(t);
-    return edd && edd <= today;
+    if (!edd) return false;
+    if (t.dateType === 'scheduled') return edd === today;
+    return edd <= today;
   }).sort((a,b) => taskScore(b)-taskScore(a)));
 
-  // Tier 2: urgent + important (future or no date)
+  // Tier 2: urgent + important — only if visible today
   const tier2 = take(active.filter(t =>
-    !used.has(t.id) && (t.urgency||1)>=2 && (t.importance||1)>=2
+    !used.has(t.id) && visibleToday(t) && (t.urgency||1)>=2 && (t.importance||1)>=2
   ).sort((a,b) => taskScore(b)-taskScore(a)));
 
-  // Tier 3: urgent only
+  // Tier 3: urgent only — only if visible today
   const tier3 = take(active.filter(t =>
-    !used.has(t.id) && (t.urgency||1)>=2
+    !used.has(t.id) && visibleToday(t) && (t.urgency||1)>=2
   ).sort((a,b) => taskScore(b)-taskScore(a)));
 
-  // Tier 4: due within 7 days
+  // Tier 4: deadline due within 7 days (never scheduled future tasks)
   const tier4 = take(active.filter(t => {
     if (used.has(t.id)) return false;
+    if (t.dateType === 'scheduled') return false; // never pull scheduled early
     const edd = effectiveDueDate(t);
     return edd && edd > today && edd <= nextWeek;
   }).sort((a,b) => (effectiveDueDate(a)||'').localeCompare(effectiveDueDate(b)||'')));
 
-  // Tier 5: important only
+  // Tier 5: important only — only if visible today
   const tier5 = take(active.filter(t =>
-    !used.has(t.id) && (t.importance||1)>=2
+    !used.has(t.id) && visibleToday(t) && (t.importance||1)>=2
   ).sort((a,b) => taskScore(b)-taskScore(a)));
 
-  // Tier 6: rest
-  const tier6 = active.filter(t => !used.has(t.id))
-    .sort((a,b) => taskScore(b)-taskScore(a));
+  // Tier 6: rest — only if visible today (no scheduled future)
+  const tier6 = active.filter(t =>
+    !used.has(t.id) && visibleToday(t)
+  ).sort((a,b) => taskScore(b)-taskScore(a));
 
   const allSorted = [...tier1,...tier2,...tier3,...tier4,...tier5,...tier6];
   const dayList = allSorted.slice(0, maxDay);
