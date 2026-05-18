@@ -254,6 +254,7 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
 .recur-btn{padding:5px 10px;border:.5px solid var(--bd);border-radius:8px;background:var(--bg2);font-size:12px;font-weight:500;cursor:pointer;color:var(--text2);transition:all .15s}
 .recur-btn.active{background:var(--lavender-l);border-color:var(--lavender);color:var(--lavender)}
 .chip-recur{background:var(--lavender-l);color:var(--lavender)}
+.chip-quick{background:#fff8e1;color:#b8881a;border:.5px solid #f0c040}
 .meeting-card{background:var(--bg);border:.5px solid var(--bd);border-radius:14px;margin-bottom:10px;overflow:hidden}
 .meeting-header{padding:13px 14px;cursor:pointer;display:flex;gap:10px;align-items:flex-start}
 .meeting-header:hover{background:var(--bg2)}
@@ -477,15 +478,17 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
         <input type="date" class="form-input" id="f-due" oninput="syncQuickDates()" style="margin-top:5px">
         <div id="dt-hint" style="font-size:11px;color:var(--text3);margin-top:4px">Możesz zrobić wcześniej jeśli masz czas.</div>
       </div>
-      <div style="display:flex;justify-content:flex-end;margin-bottom:13px">
-        <span class="ql" onclick="toggleDetails()" id="dtoggle">+ więcej opcji</span>
+      <!-- Time + Quick always visible -->
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:13px">
+        <input type="number" class="form-input" id="f-time" placeholder="Czas (min)" min="1" style="flex:1;margin:0">
+        <button type="button" id="btn-quick" onclick="toggleQuick(this)"
+          style="padding:9px 14px;border:.5px solid var(--bd2);border-radius:10px;background:var(--bg2);font-size:12px;font-weight:600;cursor:pointer;color:var(--text2);white-space:nowrap;font-family:inherit;transition:all .15s">
+          ⚡ Szybkie
+        </button>
+        <span class="ql" onclick="toggleDetails()" id="dtoggle" style="white-space:nowrap">+ więcej</span>
       </div>
 
       <div id="detail-mode" style="display:none">
-        <div class="form-group">
-          <label class="form-label">Est. czas (min)</label>
-          <input type="number" class="form-input" id="f-time" placeholder="30" min="1">
-        </div>
 
 
         <div class="form-group">
@@ -534,7 +537,8 @@ let maxDay       = parseInt(localStorage.getItem(MK) || '5');
 
 let editId = null, detailsOpen = false;
 let doneExpanded = false;
-let appMode = 'work'; // 'work' | 'private'
+let appMode = 'work';
+let fQuick = false; // 'work' | 'private'
 let fU = 1, fI = 1, fE = 'low', fStatus = 'todo', fRecur = 'none', fDateType = 'deadline';
 let allFilter = 'all';
 
@@ -1082,7 +1086,7 @@ function taskHTML(t, showAdd) {
       <div class="task-chips">
         <span class="chip chip-client" style="background:${cc}18;color:${cc};border:.5px solid ${cc}40">${t.client||'–'}</span>
         ${isQuick ? '<span class="chip chip-quick">&lt;10min</span>' : ''}
-        ${t.estTime && !isQuick ? `<span class="chip chip-time">${fmtTime(t.estTime)}</span>` : ''}
+        ${isQuick ? `<span class="chip chip-quick" onclick="event.stopPropagation();openDateRecurPopover('${t.id}',this)" style="cursor:pointer">⚡ ${fmtTime(t.estTime)}</span>` : t.estTime ? `<span class="chip chip-time">${fmtTime(t.estTime)}</span>` : ''}
         ${hasNonDefaultPriority ? `<span class="chip ${qc}" onclick="event.stopPropagation();openPrioPopoverDirect('${t.id}',this)" style="cursor:pointer">${ql}</span>` : ''}
         ${eff ? `<span class="chip ${isOverdue?'chip-overdue':t.dateType==='scheduled'?'chip-scheduled':'chip-due'}" onclick="event.stopPropagation();openDateRecurPopover('${t.id}',this)" style="cursor:pointer">${isOverdue?'! ':''}${t.dateType==='scheduled'?'📅 ':''}${eff}${!t.dueDate?' *':''}</span>` : ''}
         ${t.status==='waiting' ? `<span class="chip chip-waiting">czekam: ${(()=>{const ref=tasks.find(tx=>tx.id===t.waitingFor);return ref?'→ '+ref.name:(t.waitingFor||'?');})()}</span>` : ''}
@@ -2194,6 +2198,16 @@ function syncQuickDates() {
   document.getElementById('qd-week')?.classList.toggle('active', val===week);
   document.getElementById('qd-none')?.classList.toggle('active', !val);
 }
+function toggleQuick(btn) {
+  fQuick = !fQuick;
+  btn.style.background = fQuick ? 'var(--amber)' : 'var(--bg2)';
+  btn.style.color = fQuick ? 'white' : 'var(--text2)';
+  btn.style.borderColor = fQuick ? 'var(--amber)' : 'var(--bd2)';
+  // Set time to 5min if quick, clear if unquick
+  const timeEl = document.getElementById('f-time');
+  if (timeEl) timeEl.value = fQuick ? '5' : '';
+}
+
 function setRecur(val, btn) {
   if (val !== 'none' && !document.getElementById('f-due').value) {
     alert('Ustaw najpierw datę zadania — recurrence wymaga daty jako punktu odniesienia.');
@@ -2281,7 +2295,7 @@ function toggleDetails() {
 
 /* modal open / close */
 function openModal(id=null) {
-  editId = id; fU=1; fI=1; fE='low'; fStatus='todo'; fRecur='none'; fDateType='deadline'; fWaitingType='person'; detailsOpen=false;
+  editId = id; fU=1; fI=1; fE='low'; fStatus='todo'; fRecur='none'; fDateType='deadline'; fWaitingType='person'; fQuick=false; detailsOpen=false;
   document.getElementById('detail-mode').style.display = 'none';
   document.getElementById('dtoggle').textContent = '+ więcej opcji';
   ['f-name','f-time','f-due','f-note'].forEach(i => { const el=document.getElementById(i); if(el) el.value=''; });
@@ -2315,6 +2329,14 @@ function openModal(id=null) {
     syncQuickDates();
     setDateType(fDateType);
     syncPrioButtons();
+    // sync quick button
+    fQuick = (parseInt(document.getElementById('f-time')?.value)||999) < 10;
+    const qBtn = document.getElementById('btn-quick');
+    if (qBtn) {
+      qBtn.style.background = fQuick ? 'var(--amber)' : 'var(--bg2)';
+      qBtn.style.color = fQuick ? 'white' : 'var(--text2)';
+      qBtn.style.borderColor = fQuick ? 'var(--amber)' : 'var(--bd2)';
+    }
     document.querySelectorAll('#recur-row .recur-btn').forEach(b => b.classList.toggle('active', b.getAttribute('onclick')?.includes("'"+fRecur+"'")));
   }, 120);
 }
