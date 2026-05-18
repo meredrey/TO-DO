@@ -1549,6 +1549,14 @@ function openQcMenu(tid, btn) {
       <button class="qc-pop-btn ${dt==='deadline'?'sel':''}" onclick="setQcDateType('${tid}','deadline')">⏰ Do dnia</button>
       <button class="qc-pop-btn ${dt==='scheduled'?'sel':''}" onclick="setQcDateType('${tid}','scheduled')">📅 Dokładnie</button>
     </div>
+    <div class="qc-popover-title">Czas + Szybkie</div>
+    <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">
+      <input type="number" class="qc-pop-inp" id="time-inp-${tid}" value="${t.estTime||''}"
+        placeholder="min" min="1" style="width:80px;flex:none"
+        onblur="inlineSave('${tid}','estTime',this.value?parseInt(this.value):null)">
+      <button class="qc-pop-btn ${(t.estTime||999)<10?'sel':''}"
+        onclick="setQuickTask('${tid}',this)">⚡ Szybkie (&lt;10min)</button>
+    </div>
     <div class="qc-popover-title">Klient</div>
     <select class="qc-pop-inp" onchange="inlineSave('${tid}','client',this.value)">
       ${clients.map(cl=>`<option value="${cl}" ${cl===t.client?'selected':''}>${cl}</option>`).join('')}
@@ -2198,6 +2206,19 @@ function syncQuickDates() {
   document.getElementById('qd-week')?.classList.toggle('active', val===week);
   document.getElementById('qd-none')?.classList.toggle('active', !val);
 }
+function setQuickTask(tid, btn) {
+  const t = tasks.find(t=>t.id===tid);
+  if (!t) return;
+  const isQuick = (t.estTime||999) < 10;
+  const newTime = isQuick ? null : 5;
+  t.estTime = newTime; t.updatedAt = Date.now();
+  save(); scheduleAutoSync();
+  btn.classList.toggle('sel', !isQuick);
+  const inp = document.getElementById('time-inp-'+tid);
+  if (inp) inp.value = newTime || '';
+  updateTaskChips(tid, t);
+}
+
 function toggleQuick(btn) {
   fQuick = !fQuick;
   btn.style.background = fQuick ? 'var(--amber)' : 'var(--bg2)';
