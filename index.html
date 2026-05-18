@@ -1866,7 +1866,7 @@ function toggleDone(id, e) {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2,5),
       done: false,
       dueDate: nextRecurDate(t),  // e.g. next Monday if original was Monday
-      dateType: 'deadline',       // always deadline — shows as overdue if missed
+      dateType: 'scheduled',      // exact day — don't show before due date
       dayAssigned: null,
       subtasks: (t.subtasks||[]).map(s => Object.assign({},s,{done:false})),
       createdAt: Date.now(),
@@ -3150,10 +3150,9 @@ tasks = tasks.map(t => {
     if (s.dueDate && typeof s.dueDate==='string' && s.dueDate.length>10) s.dueDate = s.dueDate.slice(0,10);
     return s;
   });
-  // 2. Scheduled tasks with PAST date → convert to deadline
-  //    So they appear as overdue in Dziś instead of disappearing
-  if (!t.done && t.dateType === 'scheduled' && t.dueDate && t.dueDate < _today) {
-    t.dateType = 'deadline';
+  // 2. Recurring tasks → always scheduled (appear only on exact day)
+  if (!t.done && t.recur && t.recur !== 'none' && t.dueDate) {
+    t.dateType = 'scheduled';
   }
   // 3. Reset stale dayAssigned from previous days
 
