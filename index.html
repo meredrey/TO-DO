@@ -878,6 +878,7 @@ async function loadFromSheets() {
   if (!gsUrl) { setSyncStatus('Brak URL — ustaw Apps Script URL w ustawieniach.', 'err'); return; }
   setSyncStatus('Pobieram z Sheets…');
   try {
+    setSyncStatus('Łączę z Sheets…');
     const resp = await fetch(gsUrl + '?action=getAll');
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const data = await resp.json();
@@ -3215,6 +3216,7 @@ requestAnimationFrame(() => requestAnimationFrame(initCanvas));
 async function autoSyncOnStart() {
   if (!gsUrl) return;
   try {
+    setSyncStatus('Łączę z Sheets…');
     const resp = await fetch(gsUrl + '?action=getAll');
     if (!resp.ok) return;
     const data = await resp.json();
@@ -3261,7 +3263,11 @@ async function autoSyncOnStart() {
 }
 
 // Run after a short delay to not block initial render
-setTimeout(autoSyncOnStart, 1500);
+// Auto sync on start — always fetch from Sheets
+setTimeout(async function() {
+  setSyncStatus('Pobieram dane…');
+  await autoSyncOnStart();
+}, 800);
 </script>
 
 </body>
