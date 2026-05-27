@@ -1803,7 +1803,7 @@ function swipeDone(tid) {
   const t = tasks.find(t=>t.id===tid);
   if (!t) return;
   const wasDone = t.done;
-  t.done = !t.done; save();
+  t.done = !t.done; t.updatedAt = Date.now(); save();
   if (!wasDone) { const idx=tasks.indexOf(t); if(idx>=0&&idx<COLS*ROWS) explodeTile(idx); }
   renderAll2(); scheduleAutoSync();
 }
@@ -1873,6 +1873,7 @@ function toggleDone(id, e) {
   if (!t) return;
   const wasDone = t.done;
   t.done = !t.done;
+  t.updatedAt = Date.now(); // critical — ensures sync knows this is newer than Sheets
 
   if (!wasDone && t.recur && t.recur !== 'none' && t.dueDate) {
     // Create next occurrence anchored to original dueDate
