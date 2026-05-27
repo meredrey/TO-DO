@@ -425,8 +425,12 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
       </div>
 
       <div class="settings-row">
+        <div><div class="settings-row-label">Pobierz z Sheets</div><div class="settings-row-sub">załaduj dane z Google Sheets</div></div>
+        <button class="tact-btn primary" onclick="loadFromSheets()">Pobierz ↓</button>
+      </div>
+      <div class="settings-row">
         <div><div class="settings-row-label">Eksport JSON</div><div class="settings-row-sub">pobierz kopię zadań na dysk</div></div>
-        <button class="tact-btn" onclick="exportJSON()">Pobierz ↓</button>
+        <button class="tact-btn" onclick="exportJSON()">Eksport ↓</button>
       </div>
       <div class="settings-row">
         <div><div class="settings-row-label">Import JSON</div><div class="settings-row-sub">wgraj wcześniej zapisany plik</div></div>
