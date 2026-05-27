@@ -3263,21 +3263,17 @@ async function autoSyncOnStart() {
 }
 
 // Run after a short delay to not block initial render
-// Auto sync on start:
-// 1. Push local data to Sheets first
-// 2. Then pull from Sheets (merge)
+// Auto-push local data to Sheets on start (one-way only)
 setTimeout(async function() {
-  setSyncStatus('Synchronizuję…');
   try {
-    // Step 1: push local to Sheets
     await fetch(gsUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({ action: 'syncAll', tasks, clients })
     });
-  } catch(e) { /* offline — skip push */ }
-  // Step 2: pull from Sheets and merge
-  await autoSyncOnStart();
+    const ts = new Date().toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit'});
+    setSyncStatus('✓ ' + tasks.length + ' zadań · ' + ts, 'ok');
+  } catch(e) { /* offline */ }
 }, 800);
 </script>
 
