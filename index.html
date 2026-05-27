@@ -532,7 +532,9 @@ let clients      = JSON.parse(localStorage.getItem(CK)  || '["Sandoz","AZ","UCB"
 let clientNotes  = JSON.parse(localStorage.getItem(CNK) || '{}');
 let meetings     = JSON.parse(localStorage.getItem(MeK) || '[]');
 const DEFAULT_GS_URL = 'https://script.google.com/macros/s/AKfycbxe6oQcs3M2d7L2GO1TOg122P7GrH2SntzmFb-L9aW7Am5ncehCwjaRcYLTncXtjkUjWw/exec';
-let gsUrl        = localStorage.getItem(GK) || DEFAULT_GS_URL;
+// Always use DEFAULT_GS_URL — ignore stale localStorage URLs
+let gsUrl = DEFAULT_GS_URL;
+localStorage.setItem(GK, gsUrl); // overwrite any old URL
 let maxDay       = parseInt(localStorage.getItem(MK) || '5');
 
 let editId = null, detailsOpen = false;
