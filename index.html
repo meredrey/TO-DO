@@ -476,7 +476,7 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
           <button class="qd-btn" id="qd-none" onclick="setQuickDate('none')">Brak</button>
         </div>
         <input type="date" class="form-input" id="f-due" oninput="syncQuickDates()" style="margin-top:5px">
-        <div id="dt-hint" style="font-size:11px;color:var(--text3);margin-top:4px">Możesz zrobić wcześniej jeśli masz czas.</div>
+        <div id="dt-hint" style="font-size:11px;color:var(--lavender);margin-top:4px">Pojawi się w Dziś tylko w ten jeden dzień, nie wcześniej.</div>
       </div>
       <!-- Time + Quick always visible -->
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:13px">
@@ -539,7 +539,7 @@ let editId = null, detailsOpen = false;
 let doneExpanded = false;
 let appMode = 'work';
 let fQuick = false; // 'work' | 'private'
-let fU = 1, fI = 1, fE = 'low', fStatus = 'todo', fRecur = 'none', fDateType = 'deadline';
+let fU = 1, fI = 1, fE = 'low', fStatus = 'todo', fRecur = 'none', fDateType = 'scheduled';
 let allFilter = 'all';
 
 const CL_COLORS = ['#6b9478','#8a6b7e','#5e8e90','#9e7e4a','#7a6e9e','#7a8a6b','#6b7a8e','#8e6b6b'];
@@ -856,16 +856,11 @@ async function syncAll() {
   clearTimeout(syncTimer);
   setSyncStatus('Synchronizuję…');
   try {
-    const promises = tasks.map(t => fetch(gsUrl, {
-      method: 'POST', mode: 'no-cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'upsert', task: t })
-    }));
-    await Promise.all(promises);
     await fetch(gsUrl, {
-      method: 'POST', mode: 'no-cors',
+      method: 'POST',
+      mode: 'no-cors',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'syncClients', clients })
+      body: JSON.stringify({ action: 'syncAll', tasks, clients })
     });
     const ts = new Date().toLocaleTimeString('pl-PL', {hour:'2-digit',minute:'2-digit'});
     setSyncStatus('✓ ' + tasks.length + ' zadań · ' + ts, 'ok');
@@ -982,19 +977,24 @@ function getDayList() {
   const take = (arr) => { arr.forEach(t=>used.add(t.id)); return arr; };
 
   // Helper: is task visible today?
-  // scheduled → only on exact day; deadline → on or after due date (or no date)
+  // scheduled future → hidden; scheduled today/past → visible (overdue)
+  // deadline → visible when date <= today or no date
   const visibleToday = t => {
     const edd = effectiveDueDate(t);
-    if (t.dateType === 'scheduled') return edd === today; // ONLY on exact day
-    return !edd || edd <= today; // deadline: today or overdue or no date
+    if (t.dateType === 'scheduled') {
+      if (!edd) return true;          // no date = always visible
+      return edd <= today;            // today or past = visible
+    }
+    return !edd || edd <= today;
   };
 
-  // Tier 1: due today or overdue (deadline only; scheduled only on exact day)
+  // Tier 1: due today or overdue
+  // scheduled: exact day OR past (missed scheduled = overdue, show until done)
+  // deadline: date <= today or no date
   const tier1 = take(active.filter(t => {
     const edd = effectiveDueDate(t);
     if (!edd) return false;
-    if (t.dateType === 'scheduled') return edd === today;
-    return edd <= today;
+    return edd <= today; // both scheduled and deadline show when date is today or past
   }).sort((a,b) => taskScore(b)-taskScore(a)));
 
   // Tier 2: urgent + important — only if visible today
@@ -2316,7 +2316,7 @@ function toggleDetails() {
 
 /* modal open / close */
 function openModal(id=null) {
-  editId = id; fU=1; fI=1; fE='low'; fStatus='todo'; fRecur='none'; fDateType='deadline'; fWaitingType='person'; fQuick=false; detailsOpen=false;
+  editId = id; fU=1; fI=1; fE='low'; fStatus='todo'; fRecur='none'; fDateType='scheduled'; fWaitingType='person'; fQuick=false; detailsOpen=false;
   document.getElementById('detail-mode').style.display = 'none';
   document.getElementById('dtoggle').textContent = '+ więcej opcji';
   ['f-name','f-time','f-due','f-note'].forEach(i => { const el=document.getElementById(i); if(el) el.value=''; });
@@ -3234,10 +3234,7 @@ async function autoSyncOnStart() {
     const localMap = Object.fromEntries(tasks.map(t=>[t.id, t.updatedAt||0]));
 
     const missingLocally = remoteTasks.filter(t => !localIds.has(t.id));
-    // Only accept remote version if it's >10s newer than local
-    // This prevents server-side updatedAt bumps from overwriting local changes
-    const SYNC_MARGIN = 10000; // 10 seconds
-    const newerInSheets  = remoteTasks.filter(t => localIds.has(t.id) && (t.updatedAt||0) > (localMap[t.id]||0) + SYNC_MARGIN);
+    const newerInSheets = remoteTasks.filter(t => localIds.has(t.id) && (t.updatedAt||0) > (localMap[t.id]||0));
 
     if (missingLocally.length > 0 || newerInSheets.length > 0) {
       const merged = [...tasks];
