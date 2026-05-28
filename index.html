@@ -878,6 +878,28 @@ async function syncAll() {
 }
 
 // Load all data from Sheets
+function normalizeDate(v) {
+  if (!v) return null;
+  if (typeof v === 'string' && v.length > 10) {
+    // ISO format — convert to local date using Warsaw timezone
+    return new Date(v).toLocaleDateString('sv-SE', {timeZone:'Europe/Warsaw'});
+  }
+  return v;
+}
+
+function normalizeTask(t) {
+  t.dueDate     = normalizeDate(t.dueDate);
+  t.dayAssigned = normalizeDate(t.dayAssigned);
+  if (!t.updatedAt || typeof t.updatedAt !== 'number') t.updatedAt = 0;
+  // Recurring tasks → scheduled
+  if (t.recur && t.recur !== 'none' && t.dueDate) t.dateType = 'scheduled';
+  if (t.subtasks) t.subtasks = t.subtasks.map(s => {
+    s.dueDate = normalizeDate(s.dueDate);
+    return s;
+  });
+  return t;
+}
+
 async function loadFromSheets() {
   if (!gsUrl) { setSyncStatus('Brak URL — ustaw Apps Script URL w ustawieniach.', 'err'); return; }
   setSyncStatus('Pobieram z Sheets…');
@@ -887,7 +909,10 @@ async function loadFromSheets() {
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const data = await resp.json();
     if (data.error) throw new Error(data.error);
-    if (Array.isArray(data.tasks) && data.tasks.length > 0) { tasks = data.tasks; save(); }
+    if (Array.isArray(data.tasks) && data.tasks.length > 0) {
+      tasks = data.tasks.map(normalizeTask);
+      save();
+    }
     if (Array.isArray(data.clients) && data.clients.length > 0) { clients = data.clients; saveCl(); }
     const ts = new Date().toLocaleTimeString('pl-PL', {hour:'2-digit',minute:'2-digit'});
     setSyncStatus('✓ Pobrano ' + (data.tasks||[]).length + ' zadań · ' + ts, 'ok');
@@ -3192,25 +3217,8 @@ function initDate() {
 
 window.addEventListener('resize', () => { initCanvas(); });
 initDate();
-// normalize any bad date formats in localStorage (from Sheets sync)
-const _today = new Date().toISOString().split('T')[0];
-tasks = tasks.map(t => {
-  // 1. Normalize date formats from Sheets (ISO → yyyy-MM-dd)
-  ['dueDate','dayAssigned'].forEach(f => {
-    if (t[f] && typeof t[f]==='string' && t[f].length > 10) t[f] = t[f].slice(0,10);
-  });
-  if (t.subtasks) t.subtasks = t.subtasks.map(s => {
-    if (s.dueDate && typeof s.dueDate==='string' && s.dueDate.length>10) s.dueDate = s.dueDate.slice(0,10);
-    return s;
-  });
-  // 2. Recurring tasks → always scheduled (appear only on exact day)
-  if (!t.done && t.recur && t.recur !== 'none' && t.dueDate) {
-    t.dateType = 'scheduled';
-  }
-  // 3. Reset stale dayAssigned from previous days
-
-  return t;
-});
+// normalize dates and settings from localStorage
+tasks = tasks.map(normalizeTask);
 save();
 renderAll2();
 requestAnimationFrame(() => requestAnimationFrame(initCanvas));
@@ -3267,16 +3275,23 @@ async function autoSyncOnStart() {
 }
 
 // Run after a short delay to not block initial render
-// Auto-push local data to Sheets on start (one-way only)
+// On start: if local has data → push to Sheets; if local is empty → pull from Sheets
 setTimeout(async function() {
   try {
-    await fetch(gsUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action: 'syncAll', tasks, clients })
-    });
-    const ts = new Date().toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit'});
-    setSyncStatus('✓ ' + tasks.length + ' zadań · ' + ts, 'ok');
+    if (tasks.length === 0) {
+      // Local is empty — pull from Sheets
+      await loadFromSheets();
+    } else {
+      // Local has data — push to Sheets
+      const resp = await fetch(gsUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action: 'syncAll', tasks, clients })
+      });
+      const data = await resp.json();
+      const ts = new Date().toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit'});
+      setSyncStatus('✓ ' + tasks.length + ' zadań · ' + ts, 'ok');
+    }
   } catch(e) { /* offline */ }
 }, 800);
 </script>
