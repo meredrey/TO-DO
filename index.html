@@ -3274,22 +3274,54 @@ async function autoSyncOnStart() {
 }
 
 // Run after a short delay to not block initial render
-// On start: push local then pull from Sheets (always sync both ways)
+// On start: smart merge
+// Pull from Sheets, merge with local (local wins if newer), push result back
 setTimeout(async function() {
+  if (!gsUrl) return;
   try {
-    // 1. Push local to Sheets first
-    if (tasks.length > 0) {
-      await fetch(gsUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ action: 'syncAll', tasks, clients })
-      });
+    // 1. Pull from Sheets
+    const resp = await fetch(gsUrl + '?action=getAll');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (data.error || !Array.isArray(data.tasks)) return;
+
+    const remoteTasks = data.tasks.map(normalizeTask);
+
+    if (tasks.length === 0) {
+      // Local empty — just use Sheets data
+      tasks = remoteTasks;
+      if (Array.isArray(data.clients) && data.clients.length > 0) { clients = data.clients; saveCl(); }
+      save(); renderAll2(); syncTiles(); scheduleRender();
+      const ts = new Date().toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit'});
+      setSyncStatus('✓ ' + tasks.length + ' zadań · ' + ts, 'ok');
+      return;
     }
-    // 2. Pull from Sheets (always — to get changes from other devices)
-    await loadFromSheets();
-  } catch(e) {
-    setSyncStatus('Offline', 'err');
-  }
+
+    // 2. Merge: per-task, local wins if updatedAt is newer
+    const localMap = Object.fromEntries(tasks.map(t=>[t.id,t]));
+    const merged = remoteTasks.map(rt => {
+      const local = localMap[rt.id];
+      if (local && (local.updatedAt||0) >= (rt.updatedAt||0)) return local;
+      return rt;
+    });
+    // Add local tasks not in Sheets
+    const remoteIds = new Set(remoteTasks.map(t=>t.id));
+    tasks.filter(t=>!remoteIds.has(t.id)).forEach(t=>merged.push(t));
+
+    tasks = merged;
+    save(); renderAll2(); syncTiles(); scheduleRender();
+
+    // 3. Push merged result back to Sheets
+    fetch(gsUrl, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({action:'syncAll',tasks,clients})
+    }).then(r=>r.json()).then(d=>{
+      const ts = new Date().toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit'});
+      setSyncStatus('✓ ' + tasks.length + ' zadań · ' + ts, 'ok');
+    }).catch(()=>{});
+
+  } catch(e) { /* offline */ }
 }, 1000);
 </script>
 
