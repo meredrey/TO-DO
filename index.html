@@ -860,9 +860,7 @@ async function syncTask(task) {
 async function syncAll() {
   if (!gsUrl) return;
   clearTimeout(syncTimer);
-  setSyncStatus('Synchronizuję…');
   try {
-    // text/plain avoids CORS preflight, Apps Script accepts it
     const resp = await fetch(gsUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
@@ -871,11 +869,12 @@ async function syncAll() {
     const data = await resp.json();
     const ts = new Date().toLocaleTimeString('pl-PL', {hour:'2-digit',minute:'2-digit'});
     if (data.ok) setSyncStatus('✓ ' + tasks.length + ' zadań · ' + ts, 'ok');
-    else setSyncStatus('Błąd: ' + (data.error||'unknown'), 'err');
+    else setSyncStatus('Błąd: ' + (data.error||'?'), 'err');
   } catch(e) {
-    setSyncStatus('Błąd: ' + e.message, 'err');
+    setSyncStatus('Błąd sync', 'err');
   }
 }
+
 
 // Load all data from Sheets
 function normalizeDate(v) {
@@ -3275,25 +3274,23 @@ async function autoSyncOnStart() {
 }
 
 // Run after a short delay to not block initial render
-// On start: if local has data → push to Sheets; if local is empty → pull from Sheets
+// On start: push local then pull from Sheets (always sync both ways)
 setTimeout(async function() {
   try {
-    if (tasks.length === 0) {
-      // Local is empty — pull from Sheets
-      await loadFromSheets();
-    } else {
-      // Local has data — push to Sheets
-      const resp = await fetch(gsUrl, {
+    // 1. Push local to Sheets first
+    if (tasks.length > 0) {
+      await fetch(gsUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ action: 'syncAll', tasks, clients })
       });
-      const data = await resp.json();
-      const ts = new Date().toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit'});
-      setSyncStatus('✓ ' + tasks.length + ' zadań · ' + ts, 'ok');
     }
-  } catch(e) { /* offline */ }
-}, 800);
+    // 2. Pull from Sheets (always — to get changes from other devices)
+    await loadFromSheets();
+  } catch(e) {
+    setSyncStatus('Offline', 'err');
+  }
+}, 1000);
 </script>
 
 </body>
