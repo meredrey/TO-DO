@@ -49,8 +49,13 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
 .section-label{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin:20px 0 10px}
 
 /* ── TODAY LAYOUT ── */
-.today-cols{display:grid;grid-template-columns:1fr 2fr;gap:12px;margin-top:6px}
-.today-col-label{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}
+.today-cols{display:flex;flex-direction:column;gap:0;margin-top:6px}
+.today-col-label{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+.recurring-strip{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:16px;scrollbar-width:none;-ms-overflow-style:none}
+.recurring-strip::-webkit-scrollbar{display:none}
+.recur-tile{background:#ffffff;border:.5px solid var(--bd);border-radius:14px;padding:10px 12px;flex-shrink:0;width:140px;box-shadow:var(--shadow);cursor:pointer;border-left:3px solid var(--lavender)}
+.recur-tile-name{font-size:13px;font-weight:500;color:var(--text);margin-bottom:6px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.recur-tile-meta{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
 
 /* ── TASK CARD ── */
 .task-card{background:#ffffff;border:.5px solid var(--bd);border-radius:18px;margin-bottom:10px;overflow:hidden;transition:all .2s;box-shadow:var(--shadow)}
@@ -66,7 +71,7 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
 .task-body{flex:1;min-width:0}
 .task-name{font-size:14px;font-weight:500;color:var(--text);line-height:1.35;margin-bottom:4px}
 .task-name.done{text-decoration:line-through;color:var(--text3)}
-.task-chips{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.task-chips{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-top:5px}
 .chip{display:inline-flex;align-items:center;font-size:11px;padding:3px 9px;border-radius:20px;font-weight:500;border:.5px solid transparent;letter-spacing:.01em}
 .chip-client{background:var(--bg2);color:var(--text2);border-color:var(--bd)}
 .chip-urgent{background:var(--urgent-l);color:var(--urgent);border-color:rgba(192,64,64,.15)}
@@ -611,32 +616,47 @@ function renderToday() {
 
   let html = '';
 
-  // Two-column layout
-  html += '<div class="today-cols">';
-
-  // LEFT: Recurring
-  html += '<div>';
-  html += '<div class="today-col-label">↻ Cykliczne</div>';
-  if (recurring.length === 0) {
-    html += '<div style="font-size:12px;color:var(--text3);padding:8px 0">Brak na dziś</div>';
-  } else {
-    html += recurring.map(t => taskCardSmall(t)).join('');
+  // Recurring strip (horizontal scroll)
+  if (recurring.length > 0) {
+    html += '<div class="today-col-label">↻ Cykliczne</div>';
+    html += '<div class="recurring-strip">';
+    html += recurring.map(t => {
+      const edd = effectiveDueDate(t);
+      const ep = effectivePriority(t);
+      const cc = clColor(t.client);
+      const overdue = edd && edd < td();
+      return `<div class="recur-tile${ep==='urgent'?' priority-urgent':''}" onclick="toggleExpand('${t.id}',event)">
+        <div class="task-check${t.done?' done':''}" onclick="event.stopPropagation();toggleDone('${t.id}')" style="width:18px;height:18px;border-radius:50%;border:1.5px solid var(--bd2);display:flex;align-items:center;justify-content:center;margin-bottom:6px;cursor:pointer${t.done?';background:var(--sage);border-color:var(--sage)':''}">
+          <svg viewBox="0 0 10 10" fill="none" stroke="white" stroke-width="2" width="10" height="10"><polyline points="1.5,5 4,7.5 8.5,2.5"/></svg>
+        </div>
+        <div class="recur-tile-name${t.done?' done':''}" style="${t.done?'text-decoration:line-through;color:var(--text3)':''}">${t.name}</div>
+        <div class="recur-tile-meta">
+          <span class="chip chip-client" style="font-size:10px;padding:2px 6px;background:${cc}15;color:${cc};border-color:${cc}30">${t.client||'–'}</span>
+          ${edd?`<span class="chip chip-date${overdue?' overdue':''}" style="font-size:10px;padding:2px 6px">${overdue?'! ':''}${edd}</span>`:''}
+        </div>
+        ${taskDetail(t)}
+      </div>`;
+    }).join('');
+    html += '</div>';
   }
-  html += '</div>';
 
-  // RIGHT: One-time
-  html += '<div>';
+  // One-time tasks
   html += '<div class="today-col-label">Zadania dnia</div>';
-  if (dayTasks.length === 0 && !showWantMore) {
-    html += '<div style="font-size:12px;color:var(--text3);padding:8px 0">Brak zadań</div>';
-  }
   html += dayTasks.map(t => taskCardSmall(t)).join('');
-  if (showWantMore) {
-    html += `<button class="want-more-btn" onclick="openWantMore()">Chcesz kolejne zadanie? →</button>`;
-  }
-  html += '</div>';
 
-  html += '</div>'; // end cols
+  // Always show "want more" if day slots not full or all done
+  const hasBacklog = tasks.some(t => !t.done && t.status !== 'waiting' && !isRecurring(t));
+  const slotsLeft = 3 - dayTasks.filter(t => !t.done).length;
+  const showWantMoreBtn = hasBacklog && (dayTasks.length < 3 || allDone);
+
+  if (dayTasks.length === 0 && !hasBacklog) {
+    html += '<div style="font-size:13px;color:var(--text3);padding:16px 0;text-align:center">Backlog pusty 🎉</div>';
+  }
+  if (showWantMoreBtn) {
+    html += `<button class="want-more-btn" onclick="openWantMore()">
+      ${dayTasks.length === 0 ? '✦ Wybierz zadania na dziś' : '+ Dodaj kolejne zadanie'}
+    </button>`;
+  }
 
   // Blocked
   if (blocked.length > 0) {
@@ -1302,30 +1322,69 @@ function setBlockNew(id) {
    WANT MORE
 ═══════════════════════════════════════════ */
 function openWantMore() {
-  const remember = tasks.filter(t=>!t.done&&t.status!=='waiting'&&(t.priority==='none'||!t.priority)&&!isRecurring(t)&&isVisibleToday(t))
-    .sort((a,b)=>(a.createdAt||0)-(b.createdAt||0))
-    .slice(0,5);
+  // Show 5 oldest non-done non-blocked non-recurring tasks from backlog
+  const pool = tasks
+    .filter(t => !t.done && t.status !== 'waiting' && !isRecurring(t))
+    .sort((a,b) => (a.createdAt||0) - (b.createdAt||0))
+    .slice(0, 5);
 
-  if(!remember.length){alert('Brak zadań "Pamiętaj" do pokazania');return;}
+  if (!pool.length) { alert('Backlog jest pusty!'); return; }
 
-  const overlay=document.createElement('div');
-  overlay.className='overlay'; overlay.style.display='flex';
-  overlay.innerHTML=`<div class="sheet">
-    <div class="sheet-handle"></div>
-    <div class="sheet-title">Wybierz kolejne zadanie</div>
-    <div style="font-size:13px;color:var(--text2);margin-bottom:14px">Najstarsze zadania "Pamiętaj":</div>
-    ${remember.map(t=>`
-      <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:.5px solid var(--bd)">
-        <div style="flex:1">
-          <div style="font-size:14px;font-weight:500;color:var(--text)">${t.name}</div>
-          <div style="font-size:12px;color:var(--text3)">${t.client||''}</div>
-        </div>
-        <button class="tact-btn primary" onclick="addToToday('${t.id}');this.closest('.overlay').remove()">Dodaj do dnia</button>
-      </div>`).join('')}
-    <button class="tact-btn" style="width:100%;margin-top:14px" onclick="this.closest('.overlay').remove()">Zamknij</button>
-  </div>`;
-  overlay.onclick=e=>{if(e.target===overlay)overlay.remove();};
+  const selected = new Set();
+
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay'; overlay.style.display = 'flex';
+
+  const render = () => {
+    overlay.innerHTML = `<div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">Wybierz zadania na dziś</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:14px">
+        Wybierz do 3 zadań z backlogu (wybrano: ${selected.size}/3):
+      </div>
+      ${pool.map(t => {
+        const sel = selected.has(t.id);
+        const ep = effectivePriority(t);
+        const prioBadge = ep==='urgent'?'<span class="chip chip-urgent" style="font-size:10px">Pilne</span>':ep==='important'?'<span class="chip chip-important" style="font-size:10px">Ważne</span>':'';
+        return `<div onclick="wantMoreToggle('${t.id}')" style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:.5px solid var(--bd);cursor:pointer">
+          <div style="width:22px;height:22px;border-radius:50%;border:1.5px solid ${sel?'var(--sage)':'var(--bd2)'};background:${sel?'var(--sage)':'transparent'};flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all .15s">
+            ${sel?'<svg viewBox="0 0 10 10" fill="none" stroke="white" stroke-width="2" width="10" height="10"><polyline points="1.5,5 4,7.5 8.5,2.5"/></svg>':''}
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14px;font-weight:500;color:var(--text);margin-bottom:3px">${t.name}</div>
+            <div style="display:flex;gap:4px;flex-wrap:wrap">
+              <span class="chip chip-client" style="font-size:10px">${t.client||'–'}</span>
+              ${prioBadge}
+              ${t.dueDate?`<span class="chip chip-date" style="font-size:10px">${t.dueDate}</span>`:''}
+            </div>
+          </div>
+        </div>`;
+      }).join('')}
+      <button class="save-btn" style="margin-top:16px" onclick="wantMoreConfirm()">
+        Dodaj ${selected.size} zadań do dnia
+      </button>
+      <button class="tact-btn" style="width:100%;margin-top:8px" onclick="this.closest('.overlay').remove()">Anuluj</button>
+    </div>`;
+    overlay.onclick = e => { if(e.target===overlay) overlay.remove(); };
+    // re-bind toggle
+    window._wantMoreOverlay = overlay;
+    window._wantMoreSelected = selected;
+    window._wantMorePool = pool;
+  };
+
+  window.wantMoreToggle = (id) => {
+    if (selected.has(id)) { selected.delete(id); }
+    else if (selected.size < 3) { selected.add(id); }
+    render();
+  };
+
+  window.wantMoreConfirm = () => {
+    selected.forEach(id => addToToday(id));
+    overlay.remove();
+  };
+
   document.body.appendChild(overlay);
+  render();
 }
 
 function addToToday(id) {
