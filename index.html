@@ -728,7 +728,7 @@ function taskCardSmall(t) {
   const prioCls = ep==='urgent'?'priority-urgent':ep==='important'?'priority-important':'';
 
   return `<div class="task-card ${prioCls}${t.done?' done-card':''}" id="tc-${t.id}">
-    <div class="task-main" onclick="toggleExpand('${t.id}',event)">
+    <div class="task-main">
       <div class="task-check${t.done?' done':''}" onclick="event.stopPropagation();toggleDone('${t.id}')">
         <svg viewBox="0 0 10 10" fill="none" stroke="white" stroke-width="2"><polyline points="1.5,5 4,7.5 8.5,2.5"/></svg>
       </div>
@@ -743,7 +743,7 @@ function taskCardSmall(t) {
           ${sp?`<div class="sub-prog" style="margin-top:4px"><div class="sub-prog-track"><div class="sub-prog-fill" style="width:${Math.round(t.subtasks.filter(s=>s.done).length/t.subtasks.length*100)}%"></div></div><span class="sub-prog-txt">${sp}</span></div>`:''}
         </div>
       </div>
-      <button class="task-expand-btn" id="exp-${t.id}">
+      <button class="task-expand-btn" id="exp-${t.id}" onclick="event.stopPropagation();doExpand('${t.id}')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
     </div>
@@ -760,9 +760,10 @@ function taskCard(t, showAdd=false) {
 function taskDetail(t) {
   const hasNote = t.note && t.note.trim();
   return `<div class="task-detail" id="det-${t.id}">
-    <input class="det-name-inp" id="det-name-${t.id}" value="" 
-      onblur="inlineSave('${t.id}','name',this.value)"
-      onkeydown="if(event.key==='Enter')this.blur()">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px 0;gap:8px">
+      <div style="font-size:13px;font-weight:500;color:var(--text);flex:1;line-height:1.4">${t.name}</div>
+      <button onclick="openModal('${t.id}')" style="padding:5px 12px;border:.5px solid var(--bd2);border-radius:8px;background:var(--bg2);font-size:12px;font-weight:500;cursor:pointer;color:var(--text2);white-space:nowrap;font-family:inherit;flex-shrink:0">✏️ Edytuj</button>
+    </div>
     
     <!-- Quick controls -->
     <div class="qc-row" onclick="event.stopPropagation()">
@@ -858,11 +859,7 @@ function renderBacklog() {
 
   el.innerHTML = filtered.map(t => taskCard(t)).join('');
 
-  // Set name values
-  filtered.forEach(t => {
-    const inp = document.getElementById('det-name-'+t.id);
-    if (inp) inp.value = t.name;
-  });
+
 }
 
 function setBacklogFilter(f) {
@@ -1117,8 +1114,16 @@ function inlineSave(id, field, value) {
 /* ═══════════════════════════════════════════
    EXPAND / DETAIL
 ═══════════════════════════════════════════ */
+function doExpand(id) {
+  const det=document.getElementById('det-'+id);
+  const btn=document.getElementById('exp-'+id);
+  const open=!det.classList.contains('open');
+  det.classList.toggle('open',open);
+  btn?.classList.toggle('open',open);
+}
+
 function toggleExpand(id, e) {
-  if(e.target.closest('.task-check,.add-sub-row,.sub-item,.note-area,.det-tab,.det-panel,.qc-row,.popover,.task-expand-btn')) return;
+  if(e.target.closest('.task-check,.add-sub-row,.sub-item,.note-area,.det-tab,.det-panel,.qc-row,.popover,.task-expand-btn,.task-detail')) return;
   const det=document.getElementById('det-'+id);
   const btn=document.getElementById('exp-'+id);
   const open=!det.classList.contains('open');
