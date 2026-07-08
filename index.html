@@ -1329,8 +1329,14 @@ function setBlockNew(id) {
 ═══════════════════════════════════════════ */
 function openWantMore() {
   // Show 5 oldest non-done non-blocked non-recurring tasks from backlog
+  const today = td();
   const pool = tasks
-    .filter(t => !t.done && t.status !== 'waiting' && !isRecurring(t))
+    .filter(t => {
+      if (t.done || t.status === 'waiting' || isRecurring(t)) return false;
+      const edd = effectiveDueDate(t);
+      if (edd && edd > today) return false; // exclude future-dated tasks
+      return true;
+    })
     .sort((a,b) => (a.createdAt||0) - (b.createdAt||0))
     .slice(0, 5);
 
