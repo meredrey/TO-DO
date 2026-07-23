@@ -451,31 +451,22 @@ function normalizeTask(t) {
 // Normalize on load
 tasks = tasks.map(normalizeTask);
 
-// Archive stale recurring instances:
-// For each group of recurring tasks with same name+client,
-// keep only the latest undone instance visible — archive older ones
-(function archiveStaleRecurring() {
+// Advance stale recurring tasks to today:
+// If a recurring task has a past due date and was never completed,
+// advance its date to today (or next valid day for weekdays)
+(function advanceStaleRecurring() {
   const today = td();
-  // Group undone recurring tasks by name+client
-  const groups = {};
   tasks.forEach(t => {
-    if (t.done || !t.recur || t.recur === 'none') return;
-    const key = (t.name + '||' + (t.client||'')).toLowerCase();
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(t);
-  });
-
-  Object.values(groups).forEach(group => {
-    if (group.length <= 1) return;
-    // Sort by dueDate descending (newest first)
-    group.sort((a,b) => (b.dueDate||'').localeCompare(a.dueDate||''));
-    const newest = group[0];
-    // Archive all older instances (mark as done silently)
-    group.slice(1).forEach(t => {
-      t.done = true;
-      t.archivedAsStale = true;
-      t.updatedAt = Date.now();
-    });
+    if (t.done || !t.recur || t.recur === 'none' || !t.dueDate) return;
+    if (t.dueDate >= today) return; // not stale
+    // Advance to today
+    let d = new Date(today + 'T00:00:00');
+    if (t.recur === 'weekdays') {
+      while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+    }
+    const newDate = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    t.dueDate = newDate;
+    t.updatedAt = Date.now();
   });
 })();
 
