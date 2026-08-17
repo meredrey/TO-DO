@@ -240,9 +240,12 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
       <h1 id="topbar-title">Dzień dobry</h1>
       <div class="topbar-sub" id="topbar-date"></div>
     </div>
-    <button class="icon-btn" onclick="switchTab('settings',null)">
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="icon-btn" onclick="openWeeklySummary()" title="Podsumowanie tygodnia" style="font-size:16px;border:none;background:var(--bg2)">📋</button>
+      <button class="icon-btn" onclick="switchTab('settings',null)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
+    </div>
   </div>
 
   <!-- NAV -->
@@ -1135,6 +1138,80 @@ function inlineSave(id, field, value) {
 /* ═══════════════════════════════════════════
    EXPAND / DETAIL
 ═══════════════════════════════════════════ */
+function openWeeklySummary() {
+  // Get Monday of current week
+  const now = new Date();
+  const day = now.getDay();
+  const diffToMon = (day === 0) ? -6 : 1 - day;
+  const mon = new Date(now);
+  mon.setDate(now.getDate() + diffToMon);
+  mon.setHours(0,0,0,0);
+  const fri = new Date(mon);
+  fri.setDate(mon.getDate() + 4);
+  fri.setHours(23,59,59,999);
+
+  const monStr = mon.toISOString().split('T')[0];
+  const friStr = fri.toISOString().split('T')[0];
+  const weekLabel = mon.toLocaleDateString('pl-PL',{day:'numeric',month:'long'}) + ' – ' + fri.toLocaleDateString('pl-PL',{day:'numeric',month:'long',year:'numeric'});
+
+  // Get done tasks updated this week
+  const doneTasks = tasks.filter(t => {
+    if (!t.done) return false;
+    const upd = new Date(t.updatedAt||0);
+    return upd >= mon && upd <= fri;
+  });
+
+  // Group by client
+  const byClient = {};
+  doneTasks.forEach(t => {
+    const cl = t.client || 'Bez projektu';
+    if (!byClient[cl]) byClient[cl] = [];
+    byClient[cl].push(t);
+  });
+
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.style.display = 'flex';
+
+  const clientSections = Object.entries(byClient).map(([cl, ctasks]) => {
+    const cc = clColor(cl);
+    return `<div style="margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <span style="width:10px;height:10px;border-radius:50%;background:${cc};flex-shrink:0;display:inline-block"></span>
+        <span style="font-size:13px;font-weight:600;color:var(--text)">${cl}</span>
+        <span style="font-size:11px;color:var(--text3);margin-left:auto">${ctasks.length} zadań</span>
+      </div>
+      ${ctasks.map(t => `<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:.5px solid var(--bd)">
+        <span style="color:var(--sage);flex-shrink:0;margin-top:1px">✓</span>
+        <span style="font-size:13px;color:var(--text2);flex:1;line-height:1.4">${t.name}</span>
+      </div>`).join('')}
+    </div>`;
+  }).join('');
+
+  const copyText = Object.entries(byClient).map(([cl, ctasks]) =>
+    cl + ':
+' + ctasks.map(t => '• ' + t.name).join('
+')
+  ).join('
+
+');
+
+  overlay.innerHTML = `<div class="sheet" style="max-height:85vh">
+    <div class="sheet-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <div class="sheet-title" style="margin-bottom:0">Podsumowanie tygodnia</div>
+      <button class="tact-btn" onclick="navigator.clipboard?.writeText(${JSON.stringify(copyText)}).then(()=>{this.textContent='Skopiowano ✓';setTimeout(()=>this.textContent='Kopiuj',2000)})">Kopiuj</button>
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:18px">${weekLabel}</div>
+    ${doneTasks.length === 0
+      ? '<div style="text-align:center;padding:32px;color:var(--text3)">Brak ukończonych zadań w tym tygodniu</div>'
+      : clientSections}
+    <button class="tact-btn" style="width:100%;margin-top:8px" onclick="this.closest('.overlay').remove()">Zamknij</button>
+  </div>`;
+  overlay.onclick = e => { if(e.target===overlay) overlay.remove(); };
+  document.body.appendChild(overlay);
+}
+
 function doExpand(id) {
   const det=document.getElementById('det-'+id);
   const btn=document.getElementById('exp-'+id);
@@ -1464,7 +1541,7 @@ function openModal(id=null) {
 
   // Populate clients
   const sel=document.getElementById('f-client');
-  sel.innerHTML=clients.map(c=>`<option value="${c}">${c}</option>`).join('');
+  sel.innerHTML=`<option value="">— wybierz projekt —</option>`+clients.map(c=>`<option value="${c}">${c}</option>`).join('');
 
   // Set priority buttons
   setPrio('none');
