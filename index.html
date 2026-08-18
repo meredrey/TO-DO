@@ -1138,30 +1138,51 @@ function inlineSave(id, field, value) {
 /* ═══════════════════════════════════════════
    EXPAND / DETAIL
 ═══════════════════════════════════════════ */
-function openWeeklySummary() {
-  // Get Monday of current week
+let _weekOffset = 0; // 0 = current week, -1 = last week, etc.
+
+function getWeekRange(offset) {
   const now = new Date();
   const day = now.getDay();
   const diffToMon = (day === 0) ? -6 : 1 - day;
   const mon = new Date(now);
-  mon.setDate(now.getDate() + diffToMon);
+  mon.setDate(now.getDate() + diffToMon + (offset * 7));
   mon.setHours(0,0,0,0);
   const fri = new Date(mon);
   fri.setDate(mon.getDate() + 4);
   fri.setHours(23,59,59,999);
+  return { mon, fri };
+}
 
-  const monStr = mon.toISOString().split('T')[0];
-  const friStr = fri.toISOString().split('T')[0];
+function openWeeklySummary() {
+  _weekOffset = 0;
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.style.display = 'flex';
+  overlay.id = 'weekly-overlay';
+  overlay.onclick = e => { if(e.target===overlay) overlay.remove(); };
+  document.body.appendChild(overlay);
+  renderWeeklySummary();
+}
+
+function shiftWeek(delta) {
+  _weekOffset += delta;
+  renderWeeklySummary();
+}
+
+function renderWeeklySummary() {
+  const overlay = document.getElementById('weekly-overlay');
+  if (!overlay) return;
+
+  const { mon, fri } = getWeekRange(_weekOffset);
   const weekLabel = mon.toLocaleDateString('pl-PL',{day:'numeric',month:'long'}) + ' – ' + fri.toLocaleDateString('pl-PL',{day:'numeric',month:'long',year:'numeric'});
+  const relLabel = _weekOffset === 0 ? 'Ten tydzień' : _weekOffset === -1 ? 'Poprzedni tydzień' : _weekOffset < 0 ? Math.abs(_weekOffset) + ' tyg. temu' : 'Za ' + _weekOffset + ' tyg.';
 
-  // Get done tasks updated this week
   const doneTasks = tasks.filter(t => {
     if (!t.done) return false;
     const upd = new Date(t.updatedAt||0);
     return upd >= mon && upd <= fri;
   });
 
-  // Group by client
   const byClient = {};
   doneTasks.forEach(t => {
     const cl = t.client || 'Bez projektu';
@@ -1169,9 +1190,13 @@ function openWeeklySummary() {
     byClient[cl].push(t);
   });
 
-  const overlay = document.createElement('div');
-  overlay.className = 'overlay';
-  overlay.style.display = 'flex';
+  const clientOptions = (sel) => {
+    let opts = '<option value="">Bez projektu</option>';
+    clients.forEach(c => {
+      opts += '<option value="' + c + '"' + (c === sel ? ' selected' : '') + '>' + c + '</option>';
+    });
+    return opts;
+  };
 
   const clientSections = Object.entries(byClient).map(([cl, ctasks]) => {
     const cc = clColor(cl);
@@ -1181,30 +1206,47 @@ function openWeeklySummary() {
         <span style="font-size:13px;font-weight:600;color:var(--text)">${cl}</span>
         <span style="font-size:11px;color:var(--text3);margin-left:auto">${ctasks.length} zadań</span>
       </div>
-      ${ctasks.map(t => `<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:.5px solid var(--bd)">
-        <span style="color:var(--sage);flex-shrink:0;margin-top:1px">✓</span>
+      ${ctasks.map(t => `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:.5px solid var(--bd)">
+        <span style="color:var(--sage);flex-shrink:0">✓</span>
         <span style="font-size:13px;color:var(--text2);flex:1;line-height:1.4">${t.name}</span>
+        <select onchange="reassignClient('${t.id}',this.value)" style="font-size:11px;padding:3px 6px;border:.5px solid var(--bd2);border-radius:6px;background:var(--bg2);color:var(--text2);font-family:inherit;max-width:110px;flex-shrink:0">
+          ${clientOptions(t.client)}
+        </select>
       </div>`).join('')}
     </div>`;
   }).join('');
 
-  const copyText = Object.entries(byClient).map(([cl, ctasks]) => cl + ':\n' + ctasks.map(t => '• ' + t.name).join('\n')).join('\n\n');
+  window._weeklyCopyText = Object.entries(byClient).map(([cl, ctasks]) => cl + ':\n' + ctasks.map(t => '• ' + t.name).join('\n')).join('\n\n');
 
   overlay.innerHTML = `<div class="sheet" style="max-height:85vh">
     <div class="sheet-handle"></div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
       <div class="sheet-title" style="margin-bottom:0">Podsumowanie tygodnia</div>
       <button class="tact-btn" id="weekly-copy-btn" onclick="copyWeeklySummary()">Kopiuj</button>
     </div>
-    <div style="font-size:12px;color:var(--text3);margin-bottom:18px">${weekLabel}</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:18px">
+      <button class="tact-btn" onclick="shiftWeek(-1)" style="padding:6px 12px">←</button>
+      <div style="flex:1;text-align:center">
+        <div style="font-size:13px;font-weight:600;color:var(--text)">${relLabel}</div>
+        <div style="font-size:11px;color:var(--text3)">${weekLabel}</div>
+      </div>
+      <button class="tact-btn" onclick="shiftWeek(1)" style="padding:6px 12px"${_weekOffset >= 0 ? ' disabled' : ''}>→</button>
+    </div>
     ${doneTasks.length === 0
       ? '<div style="text-align:center;padding:32px;color:var(--text3)">Brak ukończonych zadań w tym tygodniu</div>'
       : clientSections}
     <button class="tact-btn" style="width:100%;margin-top:8px" onclick="this.closest('.overlay').remove()">Zamknij</button>
   </div>`;
-  overlay.onclick = e => { if(e.target===overlay) overlay.remove(); };
-  window._weeklyCopyText = copyText;
-  document.body.appendChild(overlay);
+}
+
+function reassignClient(id, newClient) {
+  const t = tasks.find(t => t.id === id);
+  if (!t) return;
+  t.client = newClient || null;
+  t.updatedAt = Date.now();
+  save(); scheduleAutoSync();
+  renderWeeklySummary();
+  renderAll();
 }
 
 function copyWeeklySummary() {
