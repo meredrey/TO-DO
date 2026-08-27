@@ -238,7 +238,7 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
   <div class="topbar">
     <div>
       <h1 id="topbar-title">Dzień dobry</h1>
-      <div class="topbar-sub" id="topbar-date"></div>
+      <div class="topbar-sub"><span id="topbar-date"></span> <span id="topbar-sync" style="color:var(--text3)"></span></div>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
       <button class="icon-btn" onclick="openWeeklySummary()" title="Podsumowanie tygodnia" style="font-size:16px;border:none;background:var(--bg2)">📋</button>
@@ -289,8 +289,12 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
     <div class="settings-section">
       <div class="settings-title">Synchronizacja</div>
       <div class="settings-row">
-        <div><div class="settings-row-label">Pobierz z Sheets</div></div>
-        <button class="tact-btn primary" onclick="loadFromSheets()">Pobierz ↓</button>
+        <div><div class="settings-row-label">Synchronizuj teraz</div><div class="settings-row-sub">pobierz i wyślij</div></div>
+        <button class="tact-btn primary" onclick="syncNow('manual')">⟳ Synchronizuj</button>
+      </div>
+      <div class="settings-row">
+        <div><div class="settings-row-label">Pobierz z Sheets</div><div class="settings-row-sub">tylko pobranie</div></div>
+        <button class="tact-btn" onclick="loadFromSheets()">Pobierz ↓</button>
       </div>
       <div class="settings-row">
         <div><div class="settings-row-label">Wyślij do Sheets</div></div>
@@ -454,25 +458,24 @@ function normalizeTask(t) {
 // Normalize on load
 tasks = tasks.map(normalizeTask);
 
-// Advance stale recurring tasks to today:
-// If a recurring task has a past due date and was never completed,
-// advance its date to today (or next valid day for weekdays)
-(function advanceStaleRecurring() {
+// Advance stale recurring tasks to today.
+// IMPORTANT: does NOT touch updatedAt. This is deterministic housekeeping
+// (both devices compute the same "today"), so marking it as an edit would
+// make every device win every merge and break sync.
+function advanceStaleRecurring() {
   const today = td();
   tasks.forEach(t => {
     if (t.done || !t.recur || t.recur === 'none' || !t.dueDate) return;
     if (t.dueDate >= today) return; // not stale
-    // Advance to today
     let d = new Date(today + 'T00:00:00');
     if (t.recur === 'weekdays') {
       while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
     }
-    const newDate = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-    t.dueDate = newDate;
-    t.updatedAt = Date.now();
+    t.dueDate = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
   });
-})();
+}
 
+advanceStaleRecurring();
 save();
 
 /* ═══════════════════════════════════════════
@@ -489,6 +492,11 @@ let syncTimer = null;
 function setSyncStatus(msg, type='') {
   const el = document.getElementById('sync-status');
   if (el) { el.textContent = msg; el.style.color = type==='err' ? 'var(--rose)' : 'var(--sage)'; }
+  const tb = document.getElementById('topbar-sync');
+  if (tb) {
+    tb.textContent = type==='err' ? '· ⚠ offline' : msg.startsWith('✓') ? '· ✓' : '· …';
+    tb.style.color = type==='err' ? 'var(--rose)' : 'var(--sage)';
+  }
 }
 
 function scheduleAutoSync() {
@@ -515,7 +523,7 @@ async function loadFromSheets() {
   if (!gsUrl) return;
   setSyncStatus('Pobieram…');
   try {
-    const resp = await fetch(gsUrl + '?action=getAll');
+    const resp = await fetch(gsUrl + '?action=getAll&t=' + Date.now(), { cache: 'no-store' });
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const data = await resp.json();
     if (data.error) throw new Error(data.error);
@@ -530,6 +538,7 @@ async function loadFromSheets() {
       const remoteIds = new Set(remoteTasks.map(t=>t.id));
       tasks.filter(t=>!remoteIds.has(t.id)).forEach(t=>merged.push(t));
       tasks = merged;
+      advanceStaleRecurring();
       save();
     }
     if (Array.isArray(data.clients) && data.clients.length > 0) { clients = data.clients; saveCl(); }
@@ -1745,41 +1754,71 @@ function switchTab(tab, btn) {
 /* ═══════════════════════════════════════════
    STARTUP SYNC
 ═══════════════════════════════════════════ */
-setTimeout(async function() {
-  if(!gsUrl) return;
+let _syncing = false;
+let _lastSyncAt = 0;
+
+async function syncNow(reason) {
+  if (!gsUrl || _syncing) return;
+  _syncing = true;
+  setSyncStatus('Synchronizuję…');
   try {
-    // Pull from Sheets
-    const resp = await fetch(gsUrl + '?action=getAll');
-    if(!resp.ok) return;
+    // 1. Pull from Sheets
+    const resp = await fetch(gsUrl + '?action=getAll&t=' + Date.now(), { cache: 'no-store' });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const data = await resp.json();
-    if(data.error || !Array.isArray(data.tasks)) return;
+    if (data.error || !Array.isArray(data.tasks)) throw new Error(data.error || 'bad payload');
 
     const remoteTasks = data.tasks.map(normalizeTask);
-    const localMap = Object.fromEntries(tasks.map(t=>[t.id,t]));
 
-    if(tasks.length === 0) {
+    // 2. Merge — newer updatedAt wins, local keeps ties
+    if (tasks.length === 0) {
       tasks = remoteTasks;
     } else {
-      const merged = remoteTasks.map(rt=>{
-        const local=localMap[rt.id];
-        return (local&&(local.updatedAt||0)>=(rt.updatedAt||0)) ? local : rt;
+      const localMap = Object.fromEntries(tasks.map(t => [t.id, t]));
+      const merged = remoteTasks.map(rt => {
+        const local = localMap[rt.id];
+        return (local && (local.updatedAt||0) >= (rt.updatedAt||0)) ? local : rt;
       });
-      const remoteIds=new Set(remoteTasks.map(t=>t.id));
-      tasks.filter(t=>!remoteIds.has(t.id)).forEach(t=>merged.push(t));
-      tasks=merged;
+      const remoteIds = new Set(remoteTasks.map(t => t.id));
+      tasks.filter(t => !remoteIds.has(t.id)).forEach(t => merged.push(t));
+      tasks = merged;
     }
 
-    if(Array.isArray(data.clients)&&data.clients.length>0){clients=data.clients;saveCl();}
-    save(); renderAll();
+    if (Array.isArray(data.clients) && data.clients.length > 0) { clients = data.clients; saveCl(); }
+    advanceStaleRecurring();
+    save();
+    renderAll();
 
-    // Push merged back
-    fetch(gsUrl,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action:'syncAll',tasks,clients})})
-      .then(r=>r.json()).then(d=>{
-        const ts=new Date().toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit'});
-        setSyncStatus(d.ok?'✓ '+tasks.length+' zadań · '+ts:'Błąd sync');
-      }).catch(()=>{});
-  } catch(e) { /* offline */ }
-}, 1000);
+    // 3. Push merged result back
+    const push = await fetch(gsUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'syncAll', tasks, clients })
+    });
+    const pd = await push.json();
+    const ts = new Date().toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit'});
+    setSyncStatus(pd.ok ? '✓ ' + tasks.length + ' zadań · ' + ts : 'Błąd: ' + (pd.error||'?'), pd.ok ? '' : 'err');
+    _lastSyncAt = Date.now();
+  } catch(e) {
+    setSyncStatus('Offline — zmiany zapisane lokalnie', 'err');
+  } finally {
+    _syncing = false;
+  }
+}
+
+// Initial sync shortly after load
+setTimeout(() => syncNow('load'), 800);
+
+// Re-sync when returning to the app (PWA on phone keeps the page alive,
+// so without this the phone never picks up changes made elsewhere)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && Date.now() - _lastSyncAt > 15000) {
+    syncNow('focus');
+  }
+});
+window.addEventListener('focus', () => {
+  if (Date.now() - _lastSyncAt > 15000) syncNow('focus');
+});
 
 /* ═══════════════════════════════════════════
    INIT
