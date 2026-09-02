@@ -287,7 +287,7 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
       </div>
     </div>
     <div class="settings-section">
-      <div class="settings-title">Synchronizacja <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)">· build v5.4</span></div>
+      <div class="settings-title">Synchronizacja <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)">· build v5.5</span></div>
       <div class="settings-row">
         <div><div class="settings-row-label">Synchronizuj teraz</div><div class="settings-row-sub">pobierz i wyślij</div></div>
         <button class="tact-btn primary" onclick="syncNow('manual')">⟳ Synchronizuj</button>
@@ -439,14 +439,20 @@ function normalizeTask(t) {
   t.dayAssigned = normalizeDate(t.dayAssigned);
   t.pickedFor   = normalizeDate(t.pickedFor) || null;
   if (!t.updatedAt || typeof t.updatedAt !== 'number') t.updatedAt = 0;
-  // Migrate old priority fields → new 'priority' field
-  if (!t.priority) {
-    const u = t.urgency||1, i = t.importance||1;
+  // 'priority' is the source of truth. urgency/importance are the legacy
+  // columns and are only consulted when priority is genuinely absent
+  // (old rows written before the priority column existed).
+  const VALID_PRIO = ['urgent','important','none'];
+  if (!VALID_PRIO.includes(t.priority)) {
+    const u = Number(t.urgency)||1, i = Number(t.importance)||1;
     if (u>=2 && i>=2) t.priority = 'urgent';
     else if (i>=2)    t.priority = 'important';
     else if (u>=2)    t.priority = 'urgent';
     else              t.priority = 'none';
   }
+  // Keep the legacy columns in step, so anything still reading them agrees.
+  t.urgency    = (t.priority === 'urgent')    ? 3 : 1;
+  t.importance = (t.priority === 'important' || t.priority === 'urgent') ? 3 : 1;
   // Recurring → scheduled
   if (t.recur && t.recur !== 'none' && t.dueDate) t.dateType = 'scheduled';
   if (t.subtasks) t.subtasks = t.subtasks.map(s => {
