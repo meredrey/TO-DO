@@ -289,7 +289,7 @@ input,select,button,textarea{font-family:'DM Sans',sans-serif}
       </div>
     </div>
     <div class="settings-section">
-      <div class="settings-title">Synchronizacja <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)">· build v5.7</span></div>
+      <div class="settings-title">Synchronizacja <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)">· build v5.8</span></div>
       <div class="settings-row">
         <div><div class="settings-row-label">Synchronizuj teraz</div><div class="settings-row-sub">pobierz i wyślij</div></div>
         <button class="tact-btn primary" onclick="syncNow('manual')">⟳ Synchronizuj</button>
@@ -681,17 +681,29 @@ function renderToday() {
   const important = oneTime.filter(t => effectivePriority(t) === 'important').sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
   const remember  = oneTime.filter(t => effectivePriority(t) === 'none');
 
-  // Tasks explicitly pulled in for TODAY always show, whatever their priority.
-  // A stale pickedFor (yesterday) simply stops matching, so an unfinished
-  // task drops back into the backlog by itself - no cleanup needed.
-  const picked = oneTime.filter(t => t.pickedFor === today);
-  const pickedIds = new Set(picked.map(t => t.id));
+  // Tasks pulled in by hand for TODAY, that aren't already urgent/important.
+  // A stale pickedFor (yesterday) stops matching, so an unfinished task
+  // drops back into the backlog by itself - no cleanup needed.
+  const pickedExtra = oneTime.filter(t =>
+    t.pickedFor === today && effectivePriority(t) === 'none'
+  );
 
-  // Auto-fill the rest of the day: up to 2 urgent, then important.
-  const autoPool = [...urgent.slice(0,2), ...important].filter(t => !pickedIds.has(t.id));
+  // Order the candidates by priority, THEN by what you picked.
+  // Priority always comes first - a hand-picked "Pamiętaj" must never
+  // push a Pilne task out of the day.
+  const candidates = [
+    ...urgent.slice(0, 2),      // up to 2 urgent
+    ...important.slice(0, 1),   // then the oldest important
+    ...pickedExtra,             // then anything you pulled in yourself
+    ...urgent.slice(2),         // then any remaining urgent
+    ...important.slice(1)       // then any remaining important
+  ];
 
-  const dayTasks = [...picked];
-  for (const t of autoPool) {
+  const seen = new Set();
+  const dayTasks = [];
+  for (const t of candidates) {
+    if (seen.has(t.id)) continue;
+    seen.add(t.id);
     if (dayTasks.filter(x => !x.done).length >= 3) break;
     dayTasks.push(t);
   }
