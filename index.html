@@ -1598,7 +1598,7 @@ function coachCreateNext() {
       const items = [];
       el.querySelectorAll('.cat-item-input').forEach(inp => {
         const v = inp.value.trim();
-        const typeEl = inp.closest('div')?.querySelector('.cat-item-type') || inp.nextElementSibling;
+        const typeEl = inp.parentElement?.querySelector('.cat-item-type');
         const type = typeEl?.value || 'habit';
         if (v) items.push({id: 'item_' + Date.now() + '_' + Math.random().toString(36).slice(2,6), name: v, type});
       });
@@ -1650,11 +1650,7 @@ function coachAddItem(btn) {
   const list = btn.previousElementSibling;
   const wrap = document.createElement('div');
   wrap.style.cssText = 'display:flex;gap:6px;align-items:center';
-  wrap.innerHTML = `<input class="cat-item-input create-input" placeholder="Cel szczegółowy" style="flex:1">
-    <select class="cat-item-type create-select" title="Typ">
-      <option value="habit">🔁</option>
-      <option value="task">📌</option>
-    </select>`;
+  wrap.innerHTML = '<input class="cat-item-input create-input" placeholder="Cel szczegółowy" style="flex:1"><select class="cat-item-type create-select" title="Typ"><option value="habit">🔁 nawyk</option><option value="task">📌 zadanie</option></select>';
   list.appendChild(wrap);
 }
 
@@ -2360,8 +2356,8 @@ function renderCreateWizard() {
           </select>
         </div>
         <div class="cat-items-list">
-          <input class="cat-item-input create-input" placeholder="Cel szczegółowy 1">
-          <input class="cat-item-input create-input" placeholder="Cel szczegółowy 2">
+          <div style="display:flex;gap:6px;align-items:center"><input class="cat-item-input create-input" placeholder="Cel szczegółowy 1" style="flex:1"><select class="cat-item-type create-select" title="Typ"><option value="habit">🔁 nawyk</option><option value="task">📌 zadanie</option></select></div>
+          <div style="display:flex;gap:6px;align-items:center"><input class="cat-item-input create-input" placeholder="Cel szczegółowy 2" style="flex:1"><select class="cat-item-type create-select" title="Typ"><option value="habit">🔁 nawyk</option><option value="task">📌 zadanie</option></select></div>
         </div>
         <button onclick="coachAddItem(this)" class="create-add-btn">+ dodaj cel</button>
       </div>`;
